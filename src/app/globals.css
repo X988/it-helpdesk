@@ -1,11 +1,2 @@
 @import "tailwindcss";
-
-:root { color-scheme: light dark; --bg:#f6f7f9; --fg:#111827; --card:#ffffff; --muted:#6b7280; --border:#e5e7eb; }
-@media (prefers-color-scheme: dark) { :root { --bg:#0b0f19; --fg:#f3f4f6; --card:#111827; --muted:#9ca3af; --border:#273244; } }
-* { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--fg); font-family:Arial,Helvetica,sans-serif; }
-a { color:inherit; }
-.shell { max-width:1180px; margin:0 auto; padding:32px 20px; }
-.card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; }
-.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px; }
-.muted { color:var(--muted); }
+:root{color-scheme:light dark;--bg:#f6f7f9;--fg:#111827;--card:#fff;--muted:#6b7280;--border:#e5e7eb;--accent:#2563eb;--danger:#dc2626}@media(prefers-color-scheme:dark){:root{--bg:#0b0f19;--fg:#f3f4f6;--card:#111827;--muted:#9ca3af;--border:#273244;--accent:#60a5fa}}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif}a{color:inherit}.shell{max-width:1180px;margin:0 auto;padding:32px 20px}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}.muted{color:var(--muted)}.top{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.button,button{background:var(--accent);color:white;border:0;border-radius:9px;padding:11px 15px;text-decoration:none;font-weight:700;cursor:pointer}.auth{max-width:430px;margin:10vh auto}.auth form{display:grid;gap:16px}.auth label{display:grid;gap:7px;font-weight:600}input,textarea,select{width:100%;padding:11px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--fg)}.error{color:var(--danger)}.tableCard{margin-top:20px;overflow:auto;padding:0}table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--border)}th{font-size:12px;text-transform:uppercase;color:var(--muted)}td a{color:var(--accent);font-weight:700}.grid .card b{font-size:30px}@media(max-width:600px){.top{align-items:flex-start;flex-direction:column}.shell{padding:20px 14px}}
