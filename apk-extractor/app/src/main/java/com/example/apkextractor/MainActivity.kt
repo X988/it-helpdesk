@@ -54,6 +54,7 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
+import java.security.MessageDigest
 import java.text.DateFormat
 import java.time.Instant
 import java.util.Date
