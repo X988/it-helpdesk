@@ -1,0 +1,26 @@
+name: APK Extractor Source Package
+
+on:
+  push:
+    branches:
+      - apk-extractor-build-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Package Android Studio project
+        run: |
+          cd apk-extractor
+          zip -r ../APKExtractor-AndroidStudio-project.zip .             -x 'app/build/*' '.gradle/*' '*.iml' '.idea/*'
+      - name: Upload project
+        uses: actions/upload-artifact@v4
+        with:
+          name: APKExtractor-project
+          path: APKExtractor-AndroidStudio-project.zip
+          if-no-files-found: error
