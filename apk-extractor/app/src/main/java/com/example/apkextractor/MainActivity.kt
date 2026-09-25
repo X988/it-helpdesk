@@ -311,7 +311,7 @@ class ApkExporter(context: Context) {
             ?: throw IOException("Хранилище не создало файл.")
 
         try {
-            if (split) writeApks(outputUri, app, info, base, splits)
+            if (split) writeApks(outputUri, app, info, ai, base, splits)
             else copyFile(base, outputUri)
         } catch (e: Exception) {
             runCatching { DocumentsContract.deleteDocument(resolver, outputUri) }
@@ -338,19 +338,51 @@ class ApkExporter(context: Context) {
         }
     }
 
-    private fun writeApks(uri: Uri, app: InstalledApp, info: PackageInfo, base: File, splits: List<File>) {
+    private data class ArchivedApk(
+        val file: String,
+        val splitName: String?,
+        val bytes: Long,
+        val sha256: String,
+    )
+
+    private fun writeApks(
+        uri: Uri,
+        app: InstalledApp,
+        info: PackageInfo,
+        applicationInfo: ApplicationInfo,
+        base: File,
+        splits: List<File>,
+    ) {
         val output = resolver.openOutputStream(uri, "w") ?: throw IOException("Не удалось открыть APKS.")
         output.use { raw ->
             ZipOutputStream(BufferedOutputStream(raw)).use { zip ->
-                addZipFile(zip, base, "base.apk")
+                val archived = mutableListOf<ArchivedApk>()
+                archived += addZipFile(zip, base, "base.apk", null)
+
+                val splitNames = applicationInfo.splitNames?.toList().orEmpty()
                 splits.forEachIndexed { index, file ->
-                    val name = file.name.takeIf { it.endsWith(".apk", true) } ?: "split_${index + 1}.apk"
-                    addZipFile(zip, file, if (name == "base.apk") "split_${index + 1}.apk" else name)
+                    val sourceName = file.name.takeIf { it.endsWith(".apk", true) } ?: "split_${index + 1}.apk"
+                    val archiveName = if (sourceName == "base.apk") "split_${index + 1}.apk" else sourceName
+                    val splitName = splitNames.getOrNull(index)
+                        ?: archiveName.removePrefix("split_").removeSuffix(".apk")
+                    archived += addZipFile(zip, file, archiveName, splitName)
                 }
+
                 val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else {
                     @Suppress("DEPRECATION")
                     info.versionCode.toLong()
                 }
+
+                val apkJson = archived.joinToString(",\n") { entry ->
+                    val splitJson = entry.splitName?.let { "\"\${jsonEscape(it)}\"" } ?: "null"
+                    """    {
+      "file": "${jsonEscape(entry.file)}",
+      "splitName": $splitJson,
+      "bytes": ${entry.bytes},
+      "sha256": "${entry.sha256}"
+    }"""
+                }
+
                 val manifest = """{
   "formatVersion": 1,
   "appName": "${jsonEscape(app.label)}",
@@ -358,7 +390,9 @@ class ApkExporter(context: Context) {
   "versionName": "${jsonEscape(info.versionName ?: app.versionName)}",
   "versionCode": $versionCode,
   "exportedAt": "${Instant.now()}",
-  "apkCount": ${1 + splits.size}
+  "apks": [
+$apkJson
+  ]
 }
 """
                 zip.putNextEntry(ZipEntry("manifest.json"))
@@ -368,10 +402,31 @@ class ApkExporter(context: Context) {
         }
     }
 
-    private fun addZipFile(zip: ZipOutputStream, file: File, name: String) {
+    private fun addZipFile(
+        zip: ZipOutputStream,
+        file: File,
+        name: String,
+        splitName: String?,
+    ): ArchivedApk {
+        val digest = MessageDigest.getInstance("SHA-256")
+        var bytes = 0L
+        val buffer = ByteArray(64 * 1024)
+
         zip.putNextEntry(ZipEntry(name))
-        BufferedInputStream(FileInputStream(file)).use { it.copyTo(zip) }
+        BufferedInputStream(FileInputStream(file)).use { input ->
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                zip.write(buffer, 0, count)
+                digest.update(buffer, 0, count)
+                bytes += count
+            }
+        }
         zip.closeEntry()
+
+        val sha256 = digest.digest().joinToString("") { "%02x".format(it) }
+        return ArchivedApk(name, splitName, bytes, sha256)
     }
 }
 
