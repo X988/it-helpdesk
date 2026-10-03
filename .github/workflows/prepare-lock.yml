@@ -1,0 +1,33 @@
+name: Prepare dependency lock
+on:
+  push:
+    branches: [codex/helpdesk-audit-2026-10-03]
+permissions:
+  contents: read
+jobs:
+  lock:
+    if: github.repository == 'X988/it-helpdesk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: codex/helpdesk-audit-2026-10-03
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm view braces version && npm view deepmerge-ts version
+      - run: npm install --package-lock-only --ignore-scripts
+      - name: Persist generated lock on this audit branch
+        run: |
+          git config user.name "Helpdesk CI"
+          git config user.email "helpdesk-ci@example.invalid"
+          git add package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "build: generate reproducible dependency lock"
+            git push origin HEAD:codex/helpdesk-audit-2026-10-03
+          fi
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
