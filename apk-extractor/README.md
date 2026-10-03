@@ -28,9 +28,18 @@ Android-приложение для экспорта установленных 
 
 ## Сборка
 
+В checkout репозитория wrapper не включён. Установите JDK 17 и Gradle 8.13,
+затем выполните из папки apk-extractor:
+
 ```bash
-./gradlew :app:assembleDebug
+gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
+
+Для локального wrapper выполните `gradle wrapper --gradle-version 8.13`,
+после этого можно пользоваться `./gradlew`. Архив проекта из Actions уже
+содержит сгенерированный wrapper.
+
+CI на pull request в Android-ветку проверяет unit-тесты, Android Lint и сборку.
 
 Результат:
 
