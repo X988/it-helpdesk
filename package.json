@@ -5,17 +5,17 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build --webpack",
-    "start": "node scripts/start.mjs",
+    "start": "node --env-file-if-exists=.env scripts/start.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "node --env-file-if-exists=.env --import tsx prisma/seed.ts",
     "test": "vitest run --exclude tests/integration.test.ts",
     "test:integration": "vitest run tests/integration.test.ts",
     "check": "prisma validate && npm run typecheck && npm run lint && npm test",
-    "db:bootstrap": "tsx scripts/bootstrap.ts",
-    "notifications:deliver": "tsx scripts/deliver-notifications.ts"
+    "db:bootstrap": "node --env-file-if-exists=.env --import tsx scripts/bootstrap.ts",
+    "notifications:deliver": "node --env-file-if-exists=.env --import tsx scripts/deliver-notifications.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1146.0",
