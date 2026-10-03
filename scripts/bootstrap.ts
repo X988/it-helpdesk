@@ -10,7 +10,7 @@ async function main() {
   if (!name || name.length > 120) throw new Error("Set BOOTSTRAP_ADMIN_NAME (1-120 characters)");
   const passwordHash = await bcrypt.hash(password, 12);
   await db.$transaction(async tx => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(734315022)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(734315022)`;
     if (await tx.user.count({ where: { role: "ADMIN", isActive: true } })) throw new Error("An active administrator already exists; use the admin interface");
     for (const category of defaultCategories) await tx.category.upsert({ where: { name: category }, update: {}, create: { name: category } });
     const user = await tx.user.create({ data: { email, name, passwordHash, role: "ADMIN" } });

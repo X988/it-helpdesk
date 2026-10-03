@@ -54,7 +54,12 @@ jobs:
       - run: npm test
       - run: npm run test:integration
       - run: npm run build
-      - run: npm run db:bootstrap
+      - name: Bootstrap first administrator and reject repeated bootstrap
+        run: |
+          npm run db:bootstrap
+          if BOOTSTRAP_ADMIN_PASSWORD=another-synthetic-ci-password npm run db:bootstrap; then
+            exit 1
+          fi
       - name: HTTP smoke test against production build
         run: |
           NODE_ENV=production node scripts/start.mjs > /tmp/helpdesk-server.log 2>&1 &
