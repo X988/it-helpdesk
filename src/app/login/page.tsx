@@ -1,4 +1,13 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-export default function Login() { const router=useRouter(); const [error,setError]=useState(""); async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setError("");const f=new FormData(e.currentTarget);const r=await fetch("/api/auth/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:f.get("email"),password:f.get("password")})});if(r.ok){router.push("/dashboard");router.refresh();}else setError("Неверный email или пароль");} return <main className="shell"><div className="card auth"><p className="muted">IT HELP DESK</p><h1>Вход</h1><form onSubmit={submit}><label>Email<input name="email" type="email" required autoComplete="email"/></label><label>Пароль<input name="password" type="password" required minLength={8} autoComplete="current-password"/></label>{error&&<p className="error">{error}</p>}<button type="submit">Войти</button></form></div></main> }
+import { api, errorText } from "@/lib/client-api";
+export default function Login() {
+  const router = useRouter(); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setBusy(true); const form = new FormData(event.currentTarget);
+    try { await api("/api/auth/login", "POST", { email: form.get("email"), password: form.get("password") }); router.push("/dashboard"); router.refresh(); }
+    catch (error) { setError(errorText(error)); } finally { setBusy(false); }
+  }
+  return <main id="content" className="shell"><section className="card auth"><h1>Вход</h1><form onSubmit={submit}><label>Email<input name="email" type="email" required autoComplete="username" maxLength={254} /></label><label>Пароль<input name="password" type="password" required autoComplete="current-password" maxLength={128} /></label>{error && <p role="alert" className="error">{error}</p>}<button disabled={busy}>{busy ? "Вход…" : "Войти"}</button></form><p className="muted">Если вы забыли пароль, обратитесь к администратору.</p></section></main>;
+}

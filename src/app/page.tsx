@@ -1,14 +1,4 @@
+import Link from "next/link";
 export default function Home() {
-  return (
-    <main className="shell">
-      <p className="muted">INTERNAL SERVICE DESK</p>
-      <h1>IT Help Desk</h1>
-      <p className="muted">Заявки, коммуникация и контроль работы IT-поддержки в одном интерфейсе.</p>
-      <section className="grid" style={{ marginTop: 28 }}>
-        <article className="card"><h2>Новая заявка</h2><p className="muted">Опишите проблему, выберите категорию и приложите скриншоты.</p></article>
-        <article className="card"><h2>Мои заявки</h2><p className="muted">Следите за статусом и отвечайте специалисту.</p></article>
-        <article className="card"><h2>IT очередь</h2><p className="muted">Рабочее место специалистов поддержки.</p></article>
-      </section>
-    </main>
-  );
+  return <main id="content" className="shell"><p className="eyebrow">СЛУЖБА IT-ПОДДЕРЖКИ</p><h1>Проблема с техникой?<br />Создайте заявку.</h1><p className="muted">Опишите проблему, приложите скриншот и следите за ответом специалиста.</p><p><Link className="button" href="/dashboard">Открыть заявки</Link></p><section className="grid section"><article className="card"><h2>1. Опишите проблему</h2><p>Выберите категорию, укажите приоритет и приложите файлы.</p></article><article className="card"><h2>2. Общайтесь со специалистом</h2><p>Переписка и история работы сохраняются в заявке.</p></article><article className="card"><h2>3. Подтвердите решение</h2><p>Закройте решённую заявку или верните её в работу, если проблема осталась.</p></article></section><p className="muted section">Для доступа нужен аккаунт, созданный администратором вашей организации.</p></main>;
 }
