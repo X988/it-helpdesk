@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
-import { requireSession } from "@/lib/auth";
-
-export async function POST() {
+import { requireSession, hashToken } from "@/lib/auth";
+import { apiError, requireSameOrigin, HttpError } from "@/lib/http";
+import { telegramConfigured } from "@/lib/telegram";
+import { rateLimit } from "@/lib/rate-limit";
+export async function POST(request: Request) {
   try {
-    const session = await requireSession(); const raw = randomBytes(32).toString("base64url");
-    const tokenHash = createHash("sha256").update(raw).digest("hex"); const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await db.telegramLinkToken.create({ data: { userId: session.userId, tokenHash, expiresAt } });
-    const username = process.env.TELEGRAM_BOT_USERNAME; if (!username) throw new Error("TELEGRAM_BOT_USERNAME is required");
-    return NextResponse.json({ url: `https://t.me/${username}?start=${raw}`, expiresAt });
-  } catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
+    requireSameOrigin(request); const session = await requireSession();
+    if (!telegramConfigured()) throw new HttpError(503, "TELEGRAM_NOT_CONFIGURED");
+    await rateLimit("telegram-link", session.userId, 5, 60_000);
+    const raw = randomBytes(32).toString("base64url"); const expiresAt = new Date(Date.now() + 10 * 60_000);
+    await db.$transaction(async tx => { await tx.telegramLinkToken.deleteMany({ where: { userId: session.userId, usedAt: null } }); await tx.telegramLinkToken.create({ data: { userId: session.userId, tokenHash: hashToken(raw), expiresAt } }); });
+    return NextResponse.json({ url: "https://t.me/" + process.env.TELEGRAM_BOT_USERNAME + "?start=" + raw, expiresAt });
+  } catch (error) { return apiError(error); }
+}
+export async function DELETE(request: Request) {
+  try {
+    requireSameOrigin(request); const session = await requireSession();
+    await db.$transaction(async tx => { await tx.telegramConnection.deleteMany({ where: { userId: session.userId } }); await tx.telegramLinkToken.deleteMany({ where: { userId: session.userId } }); await tx.auditLog.create({ data: { actorId: session.userId, action: "TELEGRAM_UNLINKED", entityType: "User", entityId: session.userId } }); });
+    return NextResponse.json({ ok: true });
+  } catch (error) { return apiError(error); }
 }

@@ -1,27 +1,48 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
-import { canReadTicket } from "@/lib/ticket-access";
-import { putPrivateObject, safeObjectKey } from "@/lib/storage";
-
+import { apiError, requireSameOrigin, validId, readBody, HttpError } from "@/lib/http";
+import { isTerminal } from "@/lib/ticket-access";
+import { lockedTicket, requireTicketAccess } from "@/lib/tickets";
+import { putPrivateObject, deletePrivateObject, safeObjectKey, safeFilename, validateUpload, MAX_FILE_SIZE, MAX_BATCH_FILES, MAX_TICKET_FILES, storageConfigured } from "@/lib/storage";
+import { rateLimit } from "@/lib/rate-limit";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  const uploaded: string[] = [];
   try {
-    const session = await requireSession(); const { id } = await context.params;
-    const ticket = await db.ticket.findUnique({ where: { id }, select: { requesterId: true } });
-    if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!canReadTicket(session.role, session.userId, ticket.requesterId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    const form = await request.formData(); const files = form.getAll("files").filter((v): v is File => v instanceof File);
-    if (!files.length || files.length > 5) return NextResponse.json({ error: "Upload 1-5 files" }, { status: 400 });
-    const created = [];
-    for (const file of files) {
-      const key = safeObjectKey(id); await putPrivateObject(key, file);
-      const row = await db.ticketAttachment.create({ data: { ticketId: id, uploaderId: session.userId, originalName: file.name.slice(0,255), objectKey: key, mimeType: file.type, size: file.size } });
-      created.push(row);
-    }
-    await db.auditLog.create({ data: { actorId: session.userId, action: "ATTACHMENTS_UPLOADED", entityType: "Ticket", entityId: id, metadata: { count: created.length } } });
-    return NextResponse.json({ attachments: created }, { status: 201 });
-  } catch (e) {
-    const m = e instanceof Error ? e.message : "UPLOAD_FAILED"; const status = m.startsWith("INVALID_FILE") ? 400 : 401;
-    return NextResponse.json({ error: m }, { status });
+    requireSameOrigin(request);
+    const session = await requireSession();
+    const id = validId((await context.params).id);
+    const ticket = await db.ticket.findUnique({ where: { id } });
+    if (!ticket) throw new HttpError(404, "NOT_FOUND");
+    requireTicketAccess(session, ticket);
+    if (isTerminal(ticket.status)) throw new HttpError(409, "TICKET_FINISHED");
+    if (!storageConfigured()) throw new HttpError(503, "STORAGE_NOT_CONFIGURED");
+    await rateLimit("uploads", session.userId, 10, 60_000);
+    const bytes = await readBody(request, MAX_BATCH_FILES * MAX_FILE_SIZE + 1024 * 1024);
+    let form: FormData;
+    try { form = await new Response(bytes, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData(); }
+    catch { throw new HttpError(400, "INVALID_MULTIPART"); }
+    const values = form.getAll("files");
+    if (!values.length || values.length > MAX_BATCH_FILES || values.some(value => !(value instanceof File))) throw new HttpError(400, "INVALID_FILE_COUNT");
+    const files = values as File[];
+    // Validate the entire batch before the first object is written.
+    for (const file of files) await validateUpload(file);
+    const data = files.map(file => ({ ticketId: id, uploaderId: session.userId, originalName: safeFilename(file.name), objectKey: safeObjectKey(id), mimeType: file.type, size: file.size }));
+    for (let i = 0; i < files.length; i++) { uploaded.push(data[i].objectKey); await putPrivateObject(data[i].objectKey, files[i]); }
+    const attachments = await db.$transaction(async tx => {
+      const current = await lockedTicket(tx, id);
+      requireTicketAccess(session, current);
+      if (isTerminal(current.status)) throw new HttpError(409, "TICKET_FINISHED");
+      if ((await tx.ticketAttachment.count({ where: { ticketId: id } })) + files.length > MAX_TICKET_FILES) throw new HttpError(409, "TICKET_FILE_LIMIT");
+      const created = [];
+      for (const row of data) created.push(await tx.ticketAttachment.create({ data: row, select: { id: true, originalName: true, size: true } }));
+      await tx.auditLog.create({ data: { actorId: session.userId, action: "ATTACHMENTS_UPLOADED", entityType: "Ticket", entityId: id, metadata: { count: created.length } } });
+      return created;
+    });
+    return NextResponse.json({ attachments }, { status: 201 });
+  } catch (error) {
+    const cleanup = await Promise.allSettled(uploaded.map(deletePrivateObject));
+    if (cleanup.some(result => result.status === "rejected")) console.error("Helpdesk storage cleanup failed; reconcile object inventory with TicketAttachment");
+    return apiError(error);
   }
 }

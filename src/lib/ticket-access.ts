@@ -8,6 +8,7 @@ export const transitions: Record<TicketStatus, TicketStatus[]> = {
 };
 export function availableTransitions(role: Role, userId: string, ticket: { status: TicketStatus; requesterId: string; assigneeId: string | null }): TicketStatus[] {
   if (role === "ADMIN") return transitions[ticket.status];
+  if (ticket.requesterId === userId && ticket.status === "RESOLVED") return ["IN_PROGRESS", "CLOSED"];
   if (role === "TECHNICIAN") return ticket.assigneeId === userId ? transitions[ticket.status] : [];
   if (role === "USER" && ticket.requesterId === userId) return ticket.status === "RESOLVED" ? ["IN_PROGRESS", "CLOSED"] : ticket.status === "NEW" ? ["CANCELLED"] : [];
   return [];
