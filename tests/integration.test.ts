@@ -252,6 +252,14 @@ describe("attachments with controlled S3 transport", () => {
     expect(url.searchParams.get("X-Amz-Expires")).toBe("300"); expect(url.searchParams.get("response-content-disposition")).toContain("attachment;");
     await use(stranger); expect((await download(new Request(process.env.APP_URL!), context(data.attachments[0].id))).status).toBe(404);
   });
+
+  test("ticket attachment quota rejects additional objects and cleans the upload", async () => {
+    const row = await ticket(); await use(owner);
+    await db.ticketAttachment.createMany({ data: Array.from({ length: 20 }, (_, index) => ({ ticketId: row.id, uploaderId: owner.userId, originalName: "fixture.pdf", objectKey: "fixture/" + row.id + "/" + index, mimeType: "application/pdf", size: 10 })) });
+    const response = await uploadFiles(uploadRequest([pdf()]), context(row.id));
+    expect(response.status).toBe(409); expect(state.deleted).toEqual(state.uploaded);
+    expect(await db.ticketAttachment.count({ where: { ticketId: row.id } })).toBe(20);
+  });
   test("closed tickets reject attachment changes", async () => {
     const row = await ticket(); await claimTicket(tech, row.id); await transitionTicket(tech, row.id, "RESOLVED"); await transitionTicket(owner, row.id, "CLOSED"); await use(owner);
     expect((await uploadFiles(uploadRequest([pdf()]), context(row.id))).status).toBe(409); expect(state.uploaded).toEqual([]);

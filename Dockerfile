@@ -21,7 +21,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=node:node /app/.next ./.next
-COPY --from=builder /app/next.config.ts ./next.config.ts
+COPY --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/scripts/start.mjs ./scripts/start.mjs
 USER node
 EXPOSE 3000

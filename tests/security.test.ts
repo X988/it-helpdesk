@@ -58,6 +58,9 @@ describe("input, CSRF and bounded requests", () => {
     await expect(readJson(new Request("http://localhost", { method: "POST", body: "{}" }))).rejects.toMatchObject({ status: 415 });
     await expect(readJson(new Request("http://localhost", { method: "POST", headers: { "content-type": "application/json" }, body: "{" }))).rejects.toMatchObject({ status: 400 });
   });
+  test("oversized Content-Length is rejected before reading the body", async () => {
+    await expect(readBody(new Request("http://localhost", { method: "POST", headers: { "content-length": "100000" }, body: "small" }), 100)).rejects.toMatchObject({ status: 413 });
+  });
   test("stream is bounded even without Content-Length", async () => {
     await expect(readBody(new Request("http://localhost", { method: "POST", body: "abcdef" }), 5)).rejects.toMatchObject({ status: 413 });
   });

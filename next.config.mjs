@@ -1,5 +1,4 @@
-import type { NextConfig } from "next";
-const config: NextConfig = {
+const config = {
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   async headers() { return [
