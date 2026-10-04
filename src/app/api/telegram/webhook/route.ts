@@ -1,48 +1,48 @@
 import { NextResponse } from "next/server";
-import { createHash } from "crypto";
+import { timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 import { db } from "@/lib/db";
 import { sendTelegram, telegram } from "@/lib/telegram";
-
-async function callback(update: any) {
-  const q = update.callback_query; const chatId = String(q?.message?.chat?.id ?? ""); const data = String(q?.data ?? "");
-  if (!chatId || !data) return;
-  const connection = await db.telegramConnection.findUnique({ where: { chatId }, include: { user: true } });
-  if (!connection || !connection.user.isActive) return telegram("answerCallbackQuery", { callback_query_id: q.id, text: "Аккаунт не подключён" });
-  const [action, ticketId] = data.split(":");
-  if (!ticketId) return;
-
-  if (action === "claim") {
-    if (!(["TECHNICIAN","ADMIN"] as string[]).includes(connection.user.role)) return telegram("answerCallbackQuery", { callback_query_id: q.id, text: "Недостаточно прав" });
-    const won = await db.$transaction(async (tx) => {
-      const changed = await tx.ticket.updateMany({ where: { id: ticketId, status: "NEW", assigneeId: null }, data: { status: "IN_PROGRESS", assigneeId: connection.userId } });
-      if (changed.count !== 1) return false;
-      await tx.ticketAssignment.create({ data: { ticketId, toAssigneeId: connection.userId, actorId: connection.userId } });
-      await tx.ticketStatusHistory.create({ data: { ticketId, fromStatus: "NEW", toStatus: "IN_PROGRESS", actorId: connection.userId } }); return true;
-    });
-    return telegram("answerCallbackQuery", { callback_query_id: q.id, text: won ? "Заявка назначена вам" : "Заявку уже взял другой специалист" });
-  }
-
-  const ticket = await db.ticket.findUnique({ where: { id: ticketId } });
-  if (!ticket || ticket.requesterId !== connection.userId || ticket.status !== "RESOLVED") return telegram("answerCallbackQuery", { callback_query_id: q.id, text: "Действие уже недоступно" });
-  const target = action === "fixed" ? "CLOSED" : action === "reopen" ? "IN_PROGRESS" : null; if (!target) return;
-  await db.$transaction(async (tx) => {
-    const changed = await tx.ticket.updateMany({ where: { id: ticketId, requesterId: connection.userId, status: "RESOLVED" }, data: { status: target, closedAt: target === "CLOSED" ? new Date() : null } });
-    if (changed.count !== 1) return;
-    await tx.ticketStatusHistory.create({ data: { ticketId, fromStatus: "RESOLVED", toStatus: target, actorId: connection.userId } });
-    await tx.auditLog.create({ data: { actorId: connection.userId, action: target === "CLOSED" ? "USER_CONFIRMED_RESOLUTION" : "TICKET_REOPENED", entityType: "Ticket", entityId: ticketId } });
-  });
-  return telegram("answerCallbackQuery", { callback_query_id: q.id, text: target === "CLOSED" ? "Заявка закрыта" : "Заявка возвращена в работу" });
-}
-
+import { consumeLinkToken } from "@/lib/telegram-link";
+import { claimTicket, transitionTicket } from "@/lib/tickets";
+import { apiError, readJson, parseInput, HttpError } from "@/lib/http";
+const chat = z.object({ id: z.number().int(), type: z.string() });
+const sender = z.object({ id: z.number().int() });
+const schema = z.object({ update_id: z.number().int(), message: z.object({ text: z.string().max(4096).optional(), chat, from: sender.optional() }).optional(), callback_query: z.object({ id: z.string().max(200), data: z.string().max(64).optional(), from: sender, message: z.object({ chat }).optional() }).optional() });
 export async function POST(request: Request) {
-  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expected || request.headers.get("x-telegram-bot-api-secret-token") !== expected) return new NextResponse("Forbidden", { status: 403 });
-  const update = await request.json().catch(() => null); if (!update) return NextResponse.json({ ok: true });
-  if (update.callback_query) { await callback(update); return NextResponse.json({ ok: true }); }
-  const message = update.message; const text = typeof message?.text === "string" ? message.text : ""; const chatId = message?.chat?.id;
-  if (!chatId || !text.startsWith("/start ")) return NextResponse.json({ ok: true });
-  const tokenHash = createHash("sha256").update(text.slice(7).trim()).digest("hex"); const link = await db.telegramLinkToken.findUnique({ where: { tokenHash } });
-  if (!link || link.usedAt || link.expiresAt <= new Date()) { await sendTelegram(String(chatId), "Ссылка недействительна или истекла."); return NextResponse.json({ ok: true }); }
-  await db.$transaction(async (tx) => { await tx.telegramConnection.upsert({ where: { userId: link.userId }, update: { chatId: String(chatId), linkedAt: new Date() }, create: { userId: link.userId, chatId: String(chatId) } }); await tx.telegramLinkToken.update({ where: { id: link.id }, data: { usedAt: new Date() } }); });
-  await sendTelegram(String(chatId), "Telegram успешно подключён к IT Help Desk."); return NextResponse.json({ ok: true });
+  try {
+    const expected = process.env.TELEGRAM_WEBHOOK_SECRET; const given = request.headers.get("x-telegram-bot-api-secret-token");
+    if (!expected || !given || Buffer.byteLength(expected) !== Buffer.byteLength(given) || !timingSafeEqual(Buffer.from(expected), Buffer.from(given))) throw new HttpError(403, "FORBIDDEN");
+    const update = parseInput(schema, await readJson(request)); const q = update.callback_query;
+    if (q) {
+      // Only the sender's private chat can operate a linked account.
+      if (!q.message || q.message.chat.type !== "private" || q.from.id !== q.message.chat.id) return NextResponse.json({ ok: true });
+      const connection = await db.telegramConnection.findUnique({ where: { chatId: String(q.from.id) }, include: { user: true } });
+      let text = "Аккаунт не подключён";
+      if (connection?.user.isActive) {
+        const parsed = /^(claim|fixed|reopen):([0-9a-f-]{36})$/i.exec(q.data ?? ""); text = "Действие недоступно";
+        if (parsed && z.uuid().safeParse(parsed[2]).success) {
+          const session = { userId: connection.userId, role: connection.user.role, email: connection.user.email, name: connection.user.name };
+          try {
+            if (parsed[1] === "claim") { await claimTicket(session, parsed[2]); text = "Заявка назначена вам"; }
+            else {
+              const ticket = await db.ticket.findUnique({ where: { id: parsed[2] }, select: { requesterId: true, status: true } });
+              if (ticket?.requesterId !== session.userId || ticket.status !== "RESOLVED") throw new HttpError(409, "INVALID_TRANSITION");
+              await transitionTicket(session, parsed[2], parsed[1] === "fixed" ? "CLOSED" : "IN_PROGRESS");
+              text = parsed[1] === "fixed" ? "Заявка закрыта" : "Заявка возвращена в работу";
+            }
+          } catch (error) { if (!(error instanceof HttpError)) throw error; }
+        }
+      }
+      await telegram("answerCallbackQuery", { callback_query_id: q.id, text });
+    } else {
+      const message = update.message;
+      if (!message || message.chat.type !== "private" || message.from?.id !== message.chat.id || !message.text?.startsWith("/start ")) return NextResponse.json({ ok: true });
+      let text = "Telegram успешно подключён к IT Help Desk.";
+      try { await consumeLinkToken(message.text.slice(7).trim(), String(message.chat.id)); }
+      catch (error) { if (!(error instanceof HttpError)) throw error; text = "Ссылка недействительна, истекла или чат уже подключён к другому аккаунту."; }
+      await sendTelegram(String(message.chat.id), text);
+    }
+    return NextResponse.json({ ok: true });
+  } catch (error) { return apiError(error); }
 }

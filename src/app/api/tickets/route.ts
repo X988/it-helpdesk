@@ -2,44 +2,27 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { ticketCreateSchema } from "@/lib/validation";
-
-export async function GET() {
+import { apiError, requireSameOrigin, readJson, parseInput } from "@/lib/http";
+import { createTicket } from "@/lib/tickets";
+import { ticketQuery } from "@/lib/ticket-query";
+import { rateLimit } from "@/lib/rate-limit";
+export async function GET(request: Request) {
   try {
     const session = await requireSession();
-    const where = session.role === "USER" ? { requesterId: session.userId } : {};
-    const tickets = await db.ticket.findMany({
-      where,
-      include: {
-        category: { select: { id: true, name: true } },
-        requester: { select: { id: true, name: true, email: true } },
-        assignee: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
-    return NextResponse.json({ tickets });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+    const { filters, where, take, skip } = ticketQuery(Object.fromEntries(new URL(request.url).searchParams), session);
+    const [tickets, total] = await db.$transaction([
+      db.ticket.findMany({ where, select: { id: true, number: true, subject: true, priority: true, status: true, createdAt: true, category: { select: { name: true } }, requester: { select: { name: true } }, assignee: { select: { name: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take, skip }),
+      db.ticket.count({ where }),
+    ]);
+    return NextResponse.json({ tickets, total, page: filters.page, pageSize: take });
+  } catch (error) { return apiError(error); }
 }
-
 export async function POST(request: Request) {
   try {
+    requireSameOrigin(request);
     const session = await requireSession();
-    const parsed = ticketCreateSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) return NextResponse.json({ error: "Invalid ticket", details: parsed.error.flatten() }, { status: 400 });
-
-    const category = await db.category.findFirst({ where: { id: parsed.data.categoryId, isActive: true }, select: { id: true } });
-    if (!category) return NextResponse.json({ error: "Category not found" }, { status: 400 });
-
-    const ticket = await db.$transaction(async (tx) => {
-      const created = await tx.ticket.create({ data: { ...parsed.data, requesterId: session.userId } });
-      await tx.ticketStatusHistory.create({ data: { ticketId: created.id, toStatus: "NEW", actorId: session.userId } });
-      await tx.auditLog.create({ data: { actorId: session.userId, action: "TICKET_CREATED", entityType: "Ticket", entityId: created.id } });
-      return created;
-    });
-    return NextResponse.json({ ticket }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+    const data = parseInput(ticketCreateSchema, await readJson(request));
+    await rateLimit("tickets", session.userId, 30, 60_000);
+    return NextResponse.json({ ticket: await createTicket(session, data) }, { status: 201 });
+  } catch (error) { return apiError(error); }
 }

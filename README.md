@@ -1,20 +1,134 @@
 # IT Help Desk
 
-Production-oriented internal IT Service Desk for ticket intake, assignment, collaboration, attachments, audit history, and Telegram notifications.
+Внутренняя система IT-поддержки: заявки, очередь специалистов, переписка,
+вложения, история статусов, управление аккаунтами и уведомления.
 
-## Status
+Стек: Next.js 16, React 19, TypeScript, PostgreSQL, Prisma 6.
+Нужен Node.js 22.13+ (ветка 22 LTS) или 24. Прямые зависимости закреплены,
+полное дерево воспроизводится по package-lock.json через npm ci.
 
-Initial repository bootstrap. Application architecture and implementation will be added in subsequent commits.
+## Что работает
 
-## Planned stack
+- USER видит свои заявки; TECHNICIAN и ADMIN видят общую очередь.
+- Специалист берёт свободную заявку; администратор назначает и переназначает.
+- Статусы: новая → в работе → ожидает ответа / решена → закрыта.
+- Автор подтверждает решение или возвращает решённую заявку в работу.
+- Ответ автора на ожидающую заявку возвращает её в работу.
+- Внутренние заметки доступны только сотрудникам поддержки.
+- Закрытые и отменённые заявки доступны для чтения.
+- Поиск, фильтры, страницы списка, журнал действий, уведомления на сайте.
+- Файлы PNG/JPEG/WebP/PDF/UTF-8 TXT: до 5 за загрузку, до 10 МБ каждый,
+  до 20 на заявку. Скачивание после проверки доступа, URL действует 5 минут.
+- Telegram — дополнительный канал: подключение личного чата, уведомления,
+  взятие заявки, подтверждение/повторное открытие.
+- Пользователей и категории создаёт администратор. Пароли не выводятся в API.
+- Сессии хранятся в БД в виде хешей случайных токенов, живут 12 часов.
+  Отключение, смена роли и сброс пароля отзывают сессии.
 
-- Next.js + TypeScript
-- PostgreSQL + Prisma
-- Tailwind CSS
-- Telegram Bot API
-- S3-compatible object storage
-- Railway deployment
+Это система **для одной службы поддержки**. Поля «Организация» и «Отдел»
+описывают пользователя; они не создают границы доступа между компаниями.
+Не используйте одну установку для независимых клиентов как SaaS.
 
-## Security baseline
+## Локальный запуск
 
-No production secrets belong in this repository. Runtime secrets must be provided through environment variables / Railway Variables.
+1. Установите Node.js и PostgreSQL 17, создайте отдельную базу helpdesk.
+2. Скопируйте .env.example в .env и заполните DATABASE_URL и APP_URL.
+   Для локальной разработки APP_URL=http://localhost:3000.
+3. Установите зависимости и примените миграции:
+
+```bash
+npm ci
+npm run db:generate
+npm run db:migrate
+```
+
+4. Для первой настоящей учётной записи задайте в .env:
+
+```dotenv
+BOOTSTRAP_ADMIN_EMAIL=your-admin-email
+BOOTSTRAP_ADMIN_NAME=your-admin-name
+BOOTSTRAP_ADMIN_PASSWORD=your-unique-password
+```
+
+Значения выше — места для ваших данных, не готовые учётные данные.
+Пароль: минимум 12 символов, максимум 72 байта UTF-8.
+
+```bash
+npm run db:bootstrap
+npm run dev
+```
+
+Bootstrap создаёт администратора и категории. Повторный запуск при наличии
+активного администратора запрещён. После создания удалите BOOTSTRAP_ADMIN_*
+из .env. Далее создавайте аккаунты в «Управление».
+
+Для демонстрационной базы вместо bootstrap можно выполнить npm run db:seed,
+предварительно задав SEED_PASSWORD. Это создаёт только вымышленные аккаунты
+admin@example.local, tech@example.local, user@example.local; повторный seed
+не меняет существующие пароли. В production этот seed запрещён.
+
+## Проверки
+
+Интеграционные тесты требуют **отдельной** базы с именем, заканчивающимся _test.
+Создайте helpdesk_test и передайте TEST_DATABASE_URL через окружение:
+
+```bash
+DATABASE_URL=postgresql://helpdesk:password@127.0.0.1:5432/helpdesk_test npm run db:migrate
+npm run check
+TEST_DATABASE_URL=postgresql://helpdesk:password@127.0.0.1:5432/helpdesk_test npm run test:integration
+npm run build
+```
+
+TEST_DATABASE_URL автоматически становится DATABASE_URL внутри Vitest.
+Тесты никогда не очищают production и не используют TRUNCATE.
+Команды с присваиванием переменных показаны для Bash; на Windows задайте
+переменные окружения в PowerShell перед запуском npm.
+
+CI проверяет установку, npm audit, схему, повторное применение миграций,
+отсутствие дрейфа БД, типы, lint, unit/integration-тесты, production-сборку,
+HTTP-сценарий с реальным сервером и Docker-образ.
+
+## Production и обновление
+
+Инструкции: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Аудит, исправления и ограничения: [docs/AUDIT.md](docs/AUDIT.md).
+
+Перед каждым обновлением сделайте резервную копию БД и хранилища.
+Миграции запускаются отдельным шагом через npm run db:migrate; сервер
+не изменяет схему при старте. Для production обязательны точный APP_URL,
+HTTPS и закрытое файловое хранилище. Реальных секретов в репозитории нет.
+
+## Дополнительные интеграции
+
+Для S3 заполните все пять S3_* переменных либо оставьте все пустыми.
+Пустая конфигурация отключает загрузку в интерфейсе, остальная система работает.
+Bucket должен быть закрытым, с TLS на публичном endpoint и ограниченными правами
+доступа к используемому bucket. Ограничьте тела запросов на reverse proxy до 52 МБ.
+
+Для Telegram нужны TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME и
+TELEGRAM_WEBHOOK_SECRET. Имя — без @. Зарегистрируйте webhook на
+https://your-domain/api/telegram/webhook с secret_token, равным секрету
+в окружении. Привязка производится через «Мой аккаунт», только в личном чате.
+
+Обработка очереди уведомлений нужна также для очистки истёкших сессий,
+ссылок Telegram и счётчиков входа. Запускайте раз в минуту:
+
+```bash
+npm run notifications:deliver
+```
+
+Или задайте CRON_SECRET (32+ случайных символа) и вызывайте по HTTPS
+POST /api/jobs/notifications с Authorization: Bearer <CRON_SECRET>.
+Это серверный секрет, он не передаётся браузеру. До 25 уведомлений за запуск,
+повторы с задержкой, до 8 попыток. Состояние очереди видно администратору.
+Без привязанного Telegram уведомление остаётся доступным на сайте.
+
+Доставка имеет семантику «как минимум один раз»: при сбое после принятия
+сообщения Telegram возможен повтор. Не включайте в уведомления пароли
+и конфиденциальное содержимое заявок.
+
+## Ветки
+
+main — веб-приложение Help Desk. apk-extractor-build-20260925 содержит
+отдельное Android-приложение экспорта APK. Оно не требуется для работы
+Help Desk и не переносится в main в рамках исправления веб-приложения.

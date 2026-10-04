@@ -5,44 +5,78 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17-alpine
         env:
           POSTGRES_USER: helpdesk
           POSTGRES_PASSWORD: helpdesk
-          POSTGRES_DB: helpdesk
+          POSTGRES_DB: helpdesk_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U helpdesk"
-          --health-interval 10s
+          --health-cmd "pg_isready -U helpdesk -d helpdesk_test"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
     env:
-      DATABASE_URL: postgresql://helpdesk:helpdesk@localhost:5432/helpdesk
-      AUTH_SECRET: ci-only-secret-value-that-is-longer-than-32-characters
+      DATABASE_URL: postgresql://helpdesk:helpdesk@127.0.0.1:5432/helpdesk_test
+      TEST_DATABASE_URL: postgresql://helpdesk:helpdesk@127.0.0.1:5432/helpdesk_test
       APP_URL: http://localhost:3000
-      TELEGRAM_BOT_TOKEN: ci-placeholder
-      TELEGRAM_WEBHOOK_SECRET: ci-placeholder
-      TELEGRAM_BOT_USERNAME: ci_placeholder_bot
-      S3_ENDPOINT: http://localhost:9000
-      S3_REGION: us-east-1
-      S3_BUCKET: ci
-      S3_ACCESS_KEY_ID: ci
-      S3_SECRET_ACCESS_KEY: ci-placeholder
+      ALLOW_INSECURE_HTTP: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      BOOTSTRAP_ADMIN_EMAIL: admin@example.test
+      BOOTSTRAP_ADMIN_NAME: CI Administrator
+      BOOTSTRAP_ADMIN_PASSWORD: ci-only-synthetic-password
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+      - run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
       - run: npx prisma validate
-      - run: npx prisma generate
-      - run: npx prisma migrate deploy
+      - run: npm run db:generate
+      - name: Apply migrations and verify repeat deployment
+        run: npm run db:migrate && npm run db:migrate
+      - name: Check migration/schema consistency
+        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - run: npm run test:integration
       - run: npm run build
+      - name: Bootstrap first administrator and reject repeated bootstrap
+        run: |
+          npm run db:bootstrap
+          if BOOTSTRAP_ADMIN_PASSWORD=another-synthetic-ci-password npm run db:bootstrap; then
+            exit 1
+          fi
+      - name: HTTP smoke test against production build
+        run: |
+          NODE_ENV=production node scripts/start.mjs > /tmp/helpdesk-server.log 2>&1 &
+          helpdesk_server_pid=$!
+          trap 'kill "$helpdesk_server_pid" 2>/dev/null || true; wait "$helpdesk_server_pid" 2>/dev/null || true' EXIT
+          node scripts/smoke.mjs
+      - name: Build and run production image
+        run: |
+          docker build --target runner -t helpdesk-ci .
+          docker run --rm --entrypoint node helpdesk-ci -e "const fs=require('node:fs');const prisma=require('@prisma/client');if(!fs.existsSync('.next/BUILD_ID')||!prisma.PrismaClient)process.exit(1);"
+          docker run -d --name helpdesk-runtime --network host -e DATABASE_URL -e APP_URL=http://localhost:3001 -e PORT=3001 -e ALLOW_INSECURE_HTTP -e NODE_ENV=production helpdesk-ci
+          trap 'docker logs helpdesk-runtime; docker rm -f helpdesk-runtime' EXIT
+          APP_URL=http://localhost:3001 node scripts/smoke.mjs
+      - name: Save failed server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: helpdesk-server-log
+          path: /tmp/helpdesk-server.log
+          if-no-files-found: ignore
