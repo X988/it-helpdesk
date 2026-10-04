@@ -17,3 +17,24 @@ Android Lint имеет точечное исключение QueryAllPackagesPe
 включая пакеты без launcher Activity. Остальные ошибки Lint блокируют CI.
 Это техническое решение не означает разрешение публикации в магазине.
 Основание: [Android package visibility](https://developer.android.com/training/package-visibility/declaring#all-apps).
+
+## Проверки
+
+[CI 37163758673](https://github.com/X988/it-helpdesk/actions/runs/37163758673)
+для commit 61f857eebf1ec42fdc98104ca61f151fa64fcf37 прошёл: 5 unit-тестов,
+0 failures/errors/skipped, Android Lint — 0 ошибок, debug APK собран.
+[Отчёты](https://github.com/X988/it-helpdesk/actions/runs/37163758673/artifacts/11288079759)
+и [debug APK](https://github.com/X988/it-helpdesk/actions/runs/37163758673/artifacts/11288359035)
+сохранены в Actions. Артефакты имеют ограниченный срок хранения;
+сборку можно воспроизвести по этому commit. Актуальный CI см. в [PR #2](https://github.com/X988/it-helpdesk/pull/2).
+
+Остаются 7 предупреждений Lint:
+- OldTargetApi: target 36 оставлен до проверки поведения на следующей версии ОС.
+- Обновления Activity, Lifecycle и Coroutines: три сообщения; совместное обновление
+  с Compose проверяется на устройстве, без слепой замены рабочих закреплённых версий.
+- DataExtractionRules: для Android 12+ стоит уточнить правила переноса данных,
+  особенно на устройствах с отличающимся поведением backup. Сейчас allowBackup=false;
+  экспортированные пользователем документы находятся у выбранного SAF-provider.
+- Две рекомендации UseKtx (toUri/createBitmap), не меняющие наблюдаемое поведение.
+
+Эти предупреждения доступны в полном отчёте, не скрыты глобальным baseline.
