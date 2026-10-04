@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -375,7 +376,7 @@ class ApkExporter(context: Context) {
                 }
 
                 val apkJson = archived.joinToString(",\n") { entry ->
-                    val splitJson = entry.splitName?.let { "\"\${jsonEscape(it)}\"" } ?: "null"
+                    val splitJson = jsonQuotedOrNull(entry.splitName)
                     """    {
       "file": "${jsonEscape(entry.file)}",
       "splitName": $splitJson,
@@ -436,7 +437,7 @@ $apkJson
 fun MainScreen(state: UiState, viewModel: MainViewModel) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
-    var pendingPackages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var pendingPackages by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val packages = pendingPackages
@@ -771,28 +772,6 @@ private fun formatBytes(bytes: Long?): String {
 private fun formatDate(value: Long): String =
     DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(value))
 
-private val invalidFileNameChars = Regex("[\\\\/:*?\"<>|\\p{Cntrl}]")
-private fun sanitizeFileName(value: String, fallback: String = "app"): String {
-    val cleaned = value.trim()
-        .replace(invalidFileNameChars, "_")
-        .replace(Regex("_+"), "_")
-        .trim(' ', '.', '_')
-        .take(96)
-    return cleaned.ifBlank { fallback }
-}
-
-private fun jsonEscape(value: String): String = buildString {
-    value.forEach { ch ->
-        when (ch) {
-            '\\' -> append("\\\\")
-            '"' -> append("\\\"")
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            else -> if (ch.code < 0x20) append("\\u%04x".format(ch.code)) else append(ch)
-        }
-    }
-}
 
 private fun Drawable.toImageBitmap(): ImageBitmap {
     if (this is BitmapDrawable && bitmap != null) return bitmap.asImageBitmap()
