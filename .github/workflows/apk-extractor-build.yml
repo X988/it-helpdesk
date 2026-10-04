@@ -45,6 +45,40 @@ jobs:
       - name: Verify and build debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace --no-daemon
 
+      - name: Summarize tests and lint
+        if: always()
+        run: |
+          if [ -f app/build/reports/lint-results-debug.txt ]; then
+            cat app/build/reports/lint-results-debug.txt
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = list(Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'))
+          if not reports:
+              raise SystemExit('No unit-test report generated')
+          total = failures = errors = skipped = 0
+          for report in reports:
+              suite = ET.parse(report).getroot()
+              total += int(suite.attrib.get('tests', 0))
+              failures += int(suite.attrib.get('failures', 0))
+              errors += int(suite.attrib.get('errors', 0))
+              skipped += int(suite.attrib.get('skipped', 0))
+          print(f'Android unit tests: {total}, failures: {failures}, errors: {errors}, skipped: {skipped}')
+          if total < 5 or failures or errors or skipped:
+              raise SystemExit('Android unit-test verification failed')
+          PY
+
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: APKExtractor-validation
+          path: |
+            apk-extractor/app/build/reports/
+            apk-extractor/app/build/test-results/
+          if-no-files-found: ignore
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
