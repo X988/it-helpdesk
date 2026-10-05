@@ -73,3 +73,10 @@ Required for real AD:
 ## Security
 
 No production secrets belong in this repository. Runtime secrets must be provided through environment variables.
+
+## Документация (RU)
+
+- [docs/ustanovka.md](docs/ustanovka.md) — установка и настройка на Linux-сервере (Node 22, PostgreSQL, AD/LDAP, nginx HTTPS, systemd, firewall, обновление, бэкап)
+- [docs/adminy.md](docs/adminy.md) — назначение администраторов и техников
+- [docs/rukovodstvo.md](docs/rukovodstvo.md) — руководство пользователя и IT-специалиста
+- [docs/IT-HelpDesk-instrukcii.docx](docs/IT-HelpDesk-instrukcii.docx) — все три раздела в одном Word-файле
