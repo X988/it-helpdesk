@@ -212,3 +212,43 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
   @@index([actorId, createdAt])
 }
+
+model AdDepartment {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  dn        String   @unique
+  parentDn  String?
+  path      String   @default("")
+  isAdminOu Boolean  @default(false)
+  userCount Int      @default(0)
+  syncedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([name])
+  @@index([isAdminOu])
+}
+
+model AdDirectoryUser {
+  id          String   @id @default(uuid()) @db.Uuid
+  username    String   @unique
+  displayName String   @default("")
+  email       String?
+  department  String?
+  ouName      String?
+  ouDn        String?
+  dn          String   @unique
+  isDisabled  Boolean  @default(false)
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([ouDn])
+  @@index([ouName])
+  @@index([department])
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+

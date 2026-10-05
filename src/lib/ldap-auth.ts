@@ -1,6 +1,7 @@
 import { Client } from "ldapts";
 import type { ParsedDomainLogin } from "@/lib/domain-login";
 import { syntheticEmail } from "@/lib/domain-login";
+import { parseOuFromDn } from "@/lib/ldap-dn";
 
 export type LdapProfile = {
   username: string;
@@ -87,6 +88,7 @@ async function searchProfile(
       "department",
       "company",
       "sAMAccountName",
+      "distinguishedName",
       "physicalDeliveryOfficeName",
     ],
     sizeLimit: 1,
@@ -98,10 +100,12 @@ async function searchProfile(
     if (Array.isArray(v)) return String(v[0] ?? "");
     return v == null ? "" : String(v);
   };
+  const dn = pick("dn") || pick("distinguishedName");
+  const ou = dn ? parseOuFromDn(dn) : null;
   return {
     name: pick("displayName") || pick("cn") || fallback.name,
     email: pick("mail") || fallback.email,
-    department: pick("department") || undefined,
+    department: pick("department") || ou?.ouName || undefined,
     organization: pick("company") || undefined,
   };
 }
