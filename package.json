@@ -16,12 +16,12 @@
   "dependencies": {
     "@aws-sdk/client-s3": "latest",
     "@aws-sdk/s3-request-presigner": "latest",
-    "@prisma/client": "latest",
+    "@prisma/client": "6.16.2",
     "bcryptjs": "latest",
     "jose": "latest",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "zod": "latest"
   },
   "devDependencies": {
@@ -29,11 +29,14 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "latest",
-    "eslint-config-next": "latest",
-    "prisma": "latest",
+    "eslint-config-next": "16.3.8",
+    "prisma": "6.16.2",
     "tailwindcss": "latest",
     "tsx": "latest",
     "typescript": "latest",
     "vitest": "latest"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
