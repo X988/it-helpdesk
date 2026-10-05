@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import LogoutButton from "@/components/LogoutButton";
+import { db } from "@/lib/db";
+import { formatPerson } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +14,13 @@ const cards = [
 
 export default async function Home() {
   const session = await getSession();
+  const me = session
+    ? await db.user.findUnique({
+        where: { id: session.userId },
+        select: { name: true, username: true },
+      })
+    : null;
+
   return (
     <main className="shell">
       <header className="top">
@@ -20,11 +30,16 @@ export default async function Home() {
         </div>
         {session ? (
           <div className="actionRow" style={{ marginBottom: 0, alignItems: "center" }}>
-            <span className="muted">{session.email}</span>
-            <Link className="button" href="/dashboard">Открыть панель</Link>
+            <span className="muted">{formatPerson(me?.name, me?.username)}</span>
+            <Link className="button" href="/dashboard">
+              Открыть панель
+            </Link>
+            <LogoutButton />
           </div>
         ) : (
-          <Link className="button" href="/login">Войти</Link>
+          <Link className="button" href="/login">
+            Войти
+          </Link>
         )}
       </header>
       <p className="muted">Заявки, коммуникация и контроль работы IT-поддержки в одном интерфейсе.</p>
@@ -37,7 +52,11 @@ export default async function Home() {
           </Link>
         ))}
       </section>
-      {!session && <p className="muted" style={{ marginTop: 20 }}>Для работы с заявками нужно <Link href="/login">войти</Link>.</p>}
+      {!session && (
+        <p className="muted" style={{ marginTop: 20 }}>
+          Для работы с заявками нужно <Link href="/login">войти</Link>.
+        </p>
+      )}
     </main>
   );
 }

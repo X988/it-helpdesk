@@ -11,8 +11,9 @@ export async function GET() {
       where,
       include: {
         category: { select: { id: true, name: true } },
-        requester: { select: { id: true, name: true, email: true } },
-        assignee: { select: { id: true, name: true, email: true } },
+        requester: { select: { id: true, name: true, email: true, username: true } },
+        assignee: { select: { id: true, name: true, email: true, username: true } },
+        organization: { select: { id: true, name: true, domain: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -27,15 +28,53 @@ export async function POST(request: Request) {
   try {
     const session = await requireSession();
     const parsed = ticketCreateSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) return NextResponse.json({ error: "Invalid ticket", details: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid ticket", details: parsed.error.flatten() }, { status: 400 });
+    }
 
-    const category = await db.category.findFirst({ where: { id: parsed.data.categoryId, isActive: true }, select: { id: true } });
+    const category = await db.category.findFirst({
+      where: { id: parsed.data.categoryId, isActive: true },
+      select: { id: true },
+    });
     if (!category) return NextResponse.json({ error: "Category not found" }, { status: 400 });
 
+    const me = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { organizationId: true },
+    });
+
+    let organizationId = parsed.data.organizationId ?? me?.organizationId ?? null;
+    if (organizationId) {
+      const org = await db.organization.findFirst({
+        where: { id: organizationId, isActive: true },
+        select: { id: true },
+      });
+      if (!org) organizationId = null;
+    }
+
     const ticket = await db.$transaction(async (tx) => {
-      const created = await tx.ticket.create({ data: { ...parsed.data, requesterId: session.userId } });
-      await tx.ticketStatusHistory.create({ data: { ticketId: created.id, toStatus: "NEW", actorId: session.userId } });
-      await tx.auditLog.create({ data: { actorId: session.userId, action: "TICKET_CREATED", entityType: "Ticket", entityId: created.id } });
+      const created = await tx.ticket.create({
+        data: {
+          subject: parsed.data.subject,
+          description: parsed.data.description,
+          categoryId: parsed.data.categoryId,
+          priority: parsed.data.priority,
+          direction: parsed.data.direction,
+          requesterId: session.userId,
+          organizationId,
+        },
+      });
+      await tx.ticketStatusHistory.create({
+        data: { ticketId: created.id, toStatus: "NEW", actorId: session.userId },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: session.userId,
+          action: "TICKET_CREATED",
+          entityType: "Ticket",
+          entityId: created.id,
+        },
+      });
       return created;
     });
     return NextResponse.json({ ticket }, { status: 201 });

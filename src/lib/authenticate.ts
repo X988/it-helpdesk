@@ -23,7 +23,6 @@ function normalizeBody(body: unknown): { login?: string; username?: string; doma
   const password = typeof o.password === "string" ? o.password : "";
   if (!password || password.length < 8 || password.length > 128) throw new Error("INVALID_BODY");
 
-  // Preferred: login "energo\\user" or username+domain
   if (typeof o.login === "string" || typeof o.username === "string") {
     return {
       login: typeof o.login === "string" ? o.login : undefined,
@@ -33,7 +32,6 @@ function normalizeBody(body: unknown): { login?: string; username?: string; doma
     };
   }
 
-  // Legacy email login → treat local-part as username when domain matches seed/example
   if (typeof o.email === "string") {
     const email = o.email.trim().toLowerCase();
     const at = email.indexOf("@");
@@ -43,6 +41,32 @@ function normalizeBody(body: unknown): { login?: string; username?: string; doma
   }
 
   throw new Error("INVALID_BODY");
+}
+
+async function resolveOrganizationId(opts: {
+  company?: string;
+  domain: string;
+}): Promise<string | undefined> {
+  const domain = opts.domain.toLowerCase();
+  const company = (opts.company ?? "").trim();
+
+  // Prefer exact company+domain match; else any org for domain; else create from company.
+  if (company) {
+    const existing = await db.organization.findFirst({
+      where: { name: company, domain },
+    });
+    if (existing) return existing.id;
+    const created = await db.organization.create({
+      data: { name: company, domain, isActive: true },
+    });
+    return created.id;
+  }
+
+  const byDomain = await db.organization.findFirst({
+    where: { domain, isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return byDomain?.id;
 }
 
 async function authenticateLocal(parsed: ReturnType<typeof parseDomainLogin>, password: string): Promise<AuthUser> {
@@ -70,12 +94,18 @@ async function authenticateLocal(parsed: ReturnType<typeof parseDomainLogin>, pa
     throw new Error("INVALID_CREDENTIALS");
   }
 
-  // Backfill username for seed accounts so later logins resolve cleanly.
   if (!user.username) {
     try {
       await db.user.update({ where: { id: user.id }, data: { username: parsed.username } });
     } catch {
       /* unique race — ignore */
+    }
+  }
+
+  if (!user.organizationId) {
+    const orgId = await resolveOrganizationId({ domain: parsed.domain });
+    if (orgId) {
+      await db.user.update({ where: { id: user.id }, data: { organizationId: orgId } }).catch(() => null);
     }
   }
 
@@ -90,6 +120,10 @@ async function authenticateLocal(parsed: ReturnType<typeof parseDomainLogin>, pa
 
 async function authenticateLdapAndSync(parsed: ReturnType<typeof parseDomainLogin>, password: string): Promise<AuthUser> {
   const profile = await authenticateWithLdap(parsed, password);
+  const orgId = await resolveOrganizationId({
+    company: profile.organization,
+    domain: profile.domain,
+  });
 
   const existing =
     (await db.user.findFirst({
@@ -107,7 +141,7 @@ async function authenticateLdapAndSync(parsed: ReturnType<typeof parseDomainLogi
         name: profile.name || existing.name,
         email: existing.email || profile.email,
         department: profile.department ?? existing.department,
-        organization: profile.organization ?? existing.organization,
+        organizationId: orgId ?? existing.organizationId,
       },
     });
     return {
@@ -119,8 +153,6 @@ async function authenticateLdapAndSync(parsed: ReturnType<typeof parseDomainLogi
     };
   }
 
-  // First successful AD login creates a USER account. Admins promote roles in DB.
-  // passwordHash is a random unusable hash — password lives in AD only.
   const randomHash = await bcrypt.hash(`ldap-only:${profile.username}:${Date.now()}`, 12);
   const created = await db.user.create({
     data: {
@@ -130,7 +162,7 @@ async function authenticateLdapAndSync(parsed: ReturnType<typeof parseDomainLogi
       passwordHash: randomHash,
       role: Role.USER,
       department: profile.department,
-      organization: profile.organization,
+      organizationId: orgId,
     },
   });
   return {
@@ -167,7 +199,6 @@ export async function authenticateDomainLogin(body: unknown): Promise<AuthUser> 
       ) {
         throw new Error("INVALID_CREDENTIALS");
       }
-      // Network/config errors should not leak details to the client.
       console.error("LDAP auth failed:", err);
       throw new Error("INVALID_CREDENTIALS");
     }

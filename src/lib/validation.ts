@@ -35,9 +35,33 @@ export const ticketCreateSchema = z.object({
   description: z.string().trim().min(5).max(10000),
   categoryId: z.string().uuid(),
   priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).default("NORMAL"),
+  direction: z.enum(["PROGRAMMING", "ADMINISTRATION", "OTHER"]),
+  organizationId: z.string().uuid().optional().nullable(),
 });
 
 export const messageCreateSchema = z.object({
   body: z.string().trim().min(1).max(10000),
   visibility: z.enum(["PUBLIC", "INTERNAL"]).default("PUBLIC"),
+});
+
+export const statusChangeSchema = z.object({
+  status: z.enum(["IN_PROGRESS", "WAITING_FOR_USER", "RESOLVED", "CLOSED", "CANCELLED"]),
+  workMinutes: z.number().int().min(1).max(100000).optional(),
+  workHours: z.number().min(0).max(1000).optional(),
+});
+
+export const assignSchema = z.object({
+  assigneeId: z.string().uuid(),
+});
+
+export const organizationSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  domain: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[a-zA-Z0-9._-]+$/, "Invalid domain")
+    .transform((v) => v.toLowerCase()),
+  isActive: z.boolean().optional().default(true),
 });
