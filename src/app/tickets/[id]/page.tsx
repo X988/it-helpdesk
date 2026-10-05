@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { canReadTicket } from "@/lib/ticket-access";
 import TicketActions from "./TicketActions";
 import LogoutButton from "@/components/LogoutButton";
+import SupportContacts from "@/components/SupportContacts";
 import {
   formatOrganization,
   formatPerson,
@@ -19,6 +20,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
   const s = await getSession();
   if (!s) redirect("/login");
   const { id } = await params;
+  const isStaff = s.role === "ADMIN" || s.role === "TECHNICIAN";
   const t = await db.ticket.findUnique({
     where: { id },
     include: {
@@ -33,25 +35,33 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
           organization: { select: { name: true, domain: true } },
         },
       },
-      assignee: { select: { id: true, name: true, username: true } },
+      assignee: { select: { id: true, name: true, username: true, email: true } },
       attachments: true,
       messages: {
-        where: s.role === "USER" ? { visibility: "PUBLIC" } : {},
-        include: { author: { select: { name: true, username: true, role: true } } },
+        where: isStaff ? {} : { visibility: "PUBLIC" },
+        include: { author: { select: { id: true, name: true, username: true, role: true } } },
         orderBy: { createdAt: "asc" },
       },
       statusHistory: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!t || !canReadTicket(s.role, s.userId, t.requesterId)) notFound();
-  const manage = s.role !== "USER";
+  const manage = isStaff;
   const org = t.organization ?? t.requester.organization;
+
+  const admins = !isStaff
+    ? await db.user.findMany({
+        where: { isActive: true, role: "ADMIN" },
+        select: { id: true, name: true, username: true, email: true, role: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
 
   return (
     <main className="shell">
       <div className="top" style={{ marginBottom: 12 }}>
         <Link href="/dashboard" className="muted">
-          ← К заявкам
+          ← {isStaff ? "К панели" : "К моим заявкам"}
         </Link>
         <LogoutButton />
       </div>
@@ -70,29 +80,45 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
             <h2>Описание</h2>
             <p className="pre">{t.description}</p>
           </article>
-          <article className="card section">
-            <h2>Переписка</h2>
-            {t.messages.length === 0 ? (
-              <p className="muted">Сообщений пока нет.</p>
-            ) : (
-              t.messages.map((m) => (
-                <div className={`message ${m.visibility === "INTERNAL" ? "internal" : ""}`} key={m.id}>
-                  <b>{formatPerson(m.author.name, m.author.username)}</b>
-                  <span className="muted">
-                    {" "}
-                    {roleLabel[m.author.role]} · {m.createdAt.toLocaleString("uk-UA")}
-                  </span>
-                  {m.visibility === "INTERNAL" && <small> ВНУТР.</small>}
-                  <p className="pre">{m.body}</p>
-                </div>
-              ))
-            )}
+          <article className="card section chatCard">
+            <h2>{isStaff ? "Переписка / чат" : "Чат с поддержкой"}</h2>
+            <p className="muted" style={{ marginTop: -8 }}>
+              {isStaff
+                ? "Публичные сообщения видит пользователь. Внутренние заметки — только IT."
+                : "Пишите сюда вопросы специалисту. Ответы появятся в этом чате."}
+            </p>
+            <div className="chat">
+              {t.messages.length === 0 ? (
+                <p className="muted">Сообщений пока нет. Напишите первое ниже.</p>
+              ) : (
+                t.messages.map((m) => {
+                  const mine = m.author.id === s.userId;
+                  return (
+                    <div
+                      className={`chatBubble ${mine ? "mine" : "theirs"} ${m.visibility === "INTERNAL" ? "internal" : ""}`}
+                      key={m.id}
+                    >
+                      <div className="chatMeta">
+                        <b>{formatPerson(m.author.name, m.author.username)}</b>
+                        <span className="muted">
+                          {" "}
+                          {roleLabel[m.author.role]} · {m.createdAt.toLocaleString("uk-UA")}
+                        </span>
+                        {m.visibility === "INTERNAL" && <small> ВНУТР.</small>}
+                      </div>
+                      <p className="pre">{m.body}</p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
             <TicketActions
               id={t.id}
               canManage={manage}
               currentStatus={t.status}
               currentAssigneeId={t.assignee?.id ?? null}
               currentWorkMinutes={t.workMinutes}
+              chatMode={!isStaff}
             />
           </article>
         </section>
@@ -100,27 +126,54 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
           <div className="card">
             <h3>Детали</h3>
             <p>
+              <b>Статус:</b> {statusLabel[t.status]}
+            </p>
+            <p>
               <b>Приоритет:</b> {priorityLabel[t.priority]}
             </p>
+            {isStaff && (
+              <p>
+                <b>Направление:</b> {directionLabel[t.direction]}
+              </p>
+            )}
+            {isStaff && (
+              <p>
+                <b>Автор:</b> {formatPerson(t.requester.name, t.requester.username)}
+              </p>
+            )}
+            {isStaff && (
+              <p>
+                <b>Отдел:</b> {t.requester.department ?? "—"}
+              </p>
+            )}
+            {isStaff && (
+              <p>
+                <b>Организация:</b> {formatOrganization(org?.name, org?.domain)}
+              </p>
+            )}
             <p>
-              <b>Направление:</b> {directionLabel[t.direction]}
+              <b>{isStaff ? "Специалист" : "Кто решает"}:</b>{" "}
+              {t.assignee ? formatPerson(t.assignee.name, t.assignee.username) : "Ещё не назначен"}
             </p>
-            <p>
-              <b>Автор:</b> {formatPerson(t.requester.name, t.requester.username)}
-            </p>
-            <p>
-              <b>Отдел:</b> {t.requester.department ?? "—"}
-            </p>
-            <p>
-              <b>Организация:</b> {formatOrganization(org?.name, org?.domain)}
-            </p>
-            <p>
-              <b>Специалист:</b> {formatPerson(t.assignee?.name, t.assignee?.username)}
-            </p>
-            <p>
-              <b>Затрачено:</b> {formatWorkTime(t.workMinutes)}
-            </p>
+            {!isStaff && t.assignee?.email && (
+              <p>
+                <b>Email специалиста:</b>{" "}
+                <a href={`mailto:${t.assignee.email}`}>{t.assignee.email}</a>
+              </p>
+            )}
+            {isStaff && (
+              <p>
+                <b>Затрачено:</b> {formatWorkTime(t.workMinutes)}
+              </p>
+            )}
           </div>
+
+          {!isStaff && (
+            <div className="section">
+              <SupportContacts contacts={admins} title="Контакты администраторов" />
+            </div>
+          )}
+
           <div className="card section">
             <h3>Файлы</h3>
             {t.attachments.length === 0 ? (
@@ -137,7 +190,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
             )}
           </div>
           <div className="card section">
-            <h3>История</h3>
+            <h3>История статусов</h3>
             {t.statusHistory.map((h) => (
               <p key={h.id} className="muted">
                 {h.fromStatus ? statusLabel[h.fromStatus] : "—"} → {statusLabel[h.toStatus]}

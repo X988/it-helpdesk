@@ -13,12 +13,14 @@ export default function TicketActions({
   currentStatus,
   currentAssigneeId,
   currentWorkMinutes,
+  chatMode = false,
 }: {
   id: string;
   canManage: boolean;
   currentStatus: string;
   currentAssigneeId: string | null;
   currentWorkMinutes: number | null;
+  chatMode?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -190,22 +192,29 @@ export default function TicketActions({
           </div>
         </>
       )}
-      <form onSubmit={message} className="ticketForm">
+      <form onSubmit={message} className="ticketForm chatComposer">
         <label>
-          Сообщение
-          <textarea name="body" required rows={4} />
+          {chatMode ? "Сообщение в чат" : "Сообщение"}
+          <textarea
+            name="body"
+            required
+            rows={4}
+            placeholder={chatMode ? "Напишите вопрос или уточнение специалисту…" : undefined}
+          />
         </label>
         {canManage && (
           <label>
             Видимость
             <select name="visibility" defaultValue="PUBLIC">
-              <option value="PUBLIC">Публичное</option>
+              <option value="PUBLIC">В чат (видно пользователю)</option>
               <option value="INTERNAL">Внутренняя заметка</option>
             </select>
           </label>
         )}
         <FilePasteZone onChange={setFiles} />
-        <button disabled={busy}>{busy ? "Отправка…" : "Отправить"}</button>
+        <button disabled={busy}>
+          {busy ? "Отправка…" : chatMode ? "Отправить в чат" : "Отправить"}
+        </button>
       </form>
       {error && <p className="error">{error}</p>}
     </div>

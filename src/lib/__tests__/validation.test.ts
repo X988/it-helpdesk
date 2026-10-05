@@ -6,7 +6,7 @@ import {
   statusChangeSchema,
   organizationSchema,
 } from "@/lib/validation";
-import { parseDomainLogin, syntheticEmail } from "@/lib/domain-login";
+import { parseDomainLogin, syntheticEmail, getLoginDomains } from "@/lib/domain-login";
 import { formatPerson, formatOrganization, priorityLabel, statusLabel } from "@/lib/labels";
 
 describe("validation schemas", () => {
@@ -114,5 +114,13 @@ describe("labels", () => {
   it("uses Russian priority and status", () => {
     expect(priorityLabel.URGENT).toBe("Срочный");
     expect(statusLabel.IN_PROGRESS).toBe("В работе");
+  });
+});
+
+describe("getLoginDomains", () => {
+  it("returns at least energo by default", () => {
+    const domains = getLoginDomains();
+    expect(domains.length).toBeGreaterThan(0);
+    expect(domains).toContain("energo");
   });
 });
