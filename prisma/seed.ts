@@ -10,6 +10,12 @@ async function main() {
   if (!password || password.length < 12) throw new Error("Set SEED_PASSWORD (12+ chars) before running the development seed");
   const passwordHash = await bcrypt.hash(password, 12);
 
+  const org = await db.organization.upsert({
+    where: { name_domain: { name: "КП", domain: "energo" } },
+    update: { isActive: true },
+    create: { name: "КП", domain: "energo" },
+  });
+
   for (const name of categories) await db.category.upsert({ where: { name }, update: {}, create: { name } });
   const users: Array<[string, string, string, Role]> = [
     ["admin@example.local", "admin", "Help Desk Admin", Role.ADMIN],
@@ -19,11 +25,11 @@ async function main() {
   for (const [email, username, name, role] of users) {
     await db.user.upsert({
       where: { email },
-      update: { name, role, username, passwordHash },
-      create: { email, username, name, role, passwordHash },
+      update: { name, role, username, passwordHash, organizationId: org.id, department: "IT" },
+      create: { email, username, name, role, passwordHash, organizationId: org.id, department: "IT" },
     });
   }
-  console.log("Development seed completed. Domain logins: energo\\admin, energo\\tech, energo\\user (password from SEED_PASSWORD).");
+  console.log("Development seed completed. Domain logins: energo\\admin, energo\\tech, energo\\user (password from SEED_PASSWORD). Org: КП (energo).");
 }
 
 main().finally(() => db.$disconnect());

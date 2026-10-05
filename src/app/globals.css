@@ -8,3 +8,9 @@
 .domainSep{display:flex;align-items:center;padding:0 2px;color:var(--muted);font-weight:700;user-select:none}
 .usernameField{flex:1;min-width:0}
 .auth code{font-size:0.92em}
+
+.filePasteZone{border:1px dashed var(--border);border-radius:10px;padding:12px;outline:none}
+.filePasteZone:focus,.filePasteZone:focus-within{border-color:var(--accent)}
+.fileList{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:8px}
+.fileList li{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px}
+.timeRow{display:grid;grid-template-columns:1fr 1fr;gap:12px}

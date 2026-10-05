@@ -11,3 +11,7 @@ coverage/
 .idea/
 .vscode/
 *.tsbuildinfo
+
+# Local attachment storage
+/data/uploads/**
+!/data/uploads/.gitkeep

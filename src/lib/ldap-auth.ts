@@ -61,17 +61,56 @@ function isInvalidCredentialsError(err: unknown): boolean {
   );
 }
 
+type ProfileFields = {
+  name: string;
+  email: string;
+  department?: string;
+  organization?: string;
+};
+
+async function searchProfile(
+  client: Client,
+  cfg: ReturnType<typeof ldapConfig>,
+  username: string,
+  fallback: ProfileFields,
+): Promise<ProfileFields> {
+  if (!cfg.baseDn) return fallback;
+  const filter = cfg.searchFilter.replaceAll("{{username}}", username.replace(/[\\*()]/g, "\\$&"));
+  const { searchEntries } = await client.search(cfg.baseDn, {
+    scope: "sub",
+    filter,
+    attributes: [
+      "dn",
+      "cn",
+      "displayName",
+      "mail",
+      "department",
+      "company",
+      "sAMAccountName",
+      "physicalDeliveryOfficeName",
+    ],
+    sizeLimit: 1,
+  });
+  const entry = searchEntries[0] as Record<string, unknown> | undefined;
+  if (!entry) return fallback;
+  const pick = (key: string) => {
+    const v = entry[key];
+    if (Array.isArray(v)) return String(v[0] ?? "");
+    return v == null ? "" : String(v);
+  };
+  return {
+    name: pick("displayName") || pick("cn") || fallback.name,
+    email: pick("mail") || fallback.email,
+    department: pick("department") || undefined,
+    organization: pick("company") || undefined,
+  };
+}
+
 /**
  * Authenticate against Active Directory / LDAP.
- * Bind strategies tried in order (fresh TCP connection each time — AD often
- * resets the socket after a failed bind):
- * 1) user@UPN_SUFFIX (if LDAP_UPN_SUFFIX set)
- * 2) DOMAIN\username
- * 3) username@domain.local (synthetic), if different from (1)
- *
- * Optional service bind (LDAP_BIND_DN) is used only to look up profile attributes
- * after a successful user bind; if absent, attributes may be minimal.
- * User-bind alone is enough to sign in.
+ * After successful user bind, searches for displayName/department/company
+ * with the user connection; if empty and LDAP_BIND_DN is set, re-searches
+ * with the service account.
  */
 export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: string): Promise<LdapProfile> {
   if (!password) throw new Error("INVALID_CREDENTIALS");
@@ -108,36 +147,23 @@ export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: 
     throw lastError instanceof Error ? lastError : new Error("INVALID_CREDENTIALS");
   }
 
-  let email = syntheticEmail(parsed.username, parsed.domain);
-  let name = parsed.username;
-  let department: string | undefined;
-  let organization: string | undefined;
+  let fields: ProfileFields = {
+    email: syntheticEmail(parsed.username, parsed.domain),
+    name: parsed.username,
+  };
 
   try {
-    if (cfg.baseDn) {
-      // Re-bind with service account for search if provided (user bind may lack search rights).
-      if (cfg.bindDn && cfg.bindPassword) {
-        await boundClient.bind(cfg.bindDn, cfg.bindPassword);
-      }
-      const filter = cfg.searchFilter.replaceAll("{{username}}", parsed.username.replace(/[\\*()]/g, "\\$&"));
-      const { searchEntries } = await boundClient.search(cfg.baseDn, {
-        scope: "sub",
-        filter,
-        attributes: ["dn", "cn", "displayName", "mail", "department", "company", "sAMAccountName"],
-        sizeLimit: 1,
-      });
-      const entry = searchEntries[0] as Record<string, unknown> | undefined;
-      if (entry) {
-        const pick = (key: string) => {
-          const v = entry[key];
-          if (Array.isArray(v)) return String(v[0] ?? "");
-          return v == null ? "" : String(v);
-        };
-        name = pick("displayName") || pick("cn") || name;
-        email = pick("mail") || email;
-        department = pick("department") || undefined;
-        organization = pick("company") || undefined;
-      }
+    // 1) Search with user privileges (often enough for own attributes).
+    fields = await searchProfile(boundClient, cfg, parsed.username, fields);
+
+    // 2) If department/company missing and service bind configured — re-search.
+    const needsService =
+      cfg.bindDn &&
+      cfg.bindPassword &&
+      (!fields.department || !fields.organization || fields.name === parsed.username);
+    if (needsService) {
+      await boundClient.bind(cfg.bindDn, cfg.bindPassword);
+      fields = await searchProfile(boundClient, cfg, parsed.username, fields);
     }
   } catch {
     // Profile lookup is best-effort; successful bind is enough to sign in.
@@ -148,9 +174,9 @@ export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: 
   return {
     username: parsed.username,
     domain: parsed.domain,
-    email: email.toLowerCase(),
-    name,
-    department,
-    organization,
+    email: fields.email.toLowerCase(),
+    name: fields.name,
+    department: fields.department,
+    organization: fields.organization,
   };
 }

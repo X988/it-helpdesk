@@ -11,12 +11,22 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       where: { id },
       include: {
         category: true,
-        requester: { select: { id: true, name: true, email: true, organization: true, department: true } },
-        assignee: { select: { id: true, name: true, email: true } },
+        organization: { select: { id: true, name: true, domain: true } },
+        requester: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            username: true,
+            department: true,
+            organization: { select: { id: true, name: true, domain: true } },
+          },
+        },
+        assignee: { select: { id: true, name: true, email: true, username: true } },
         attachments: { orderBy: { createdAt: "asc" } },
         messages: {
           where: session.role === "USER" ? { visibility: "PUBLIC" } : {},
-          include: { author: { select: { id: true, name: true, role: true } } },
+          include: { author: { select: { id: true, name: true, username: true, role: true } } },
           orderBy: { createdAt: "asc" },
         },
         assignments: { orderBy: { createdAt: "asc" } },
@@ -24,7 +34,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       },
     });
     if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!canReadTicket(session.role, session.userId, ticket.requesterId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!canReadTicket(session.role, session.userId, ticket.requesterId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     return NextResponse.json({ ticket });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
