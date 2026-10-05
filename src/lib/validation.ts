@@ -1,7 +1,14 @@
 import { z } from "zod";
 
+const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(254)
+  .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), "Invalid email address");
+
 export const loginSchema = z.object({
-  email: z.string().email().max(254).transform((v) => v.toLowerCase().trim()),
+  email: emailSchema,
   password: z.string().min(8).max(128),
 });
 

@@ -11,6 +11,13 @@ function secret() {
   return encoder.encode(value);
 }
 
+function cookieSecure() {
+  const appUrl = process.env.APP_URL ?? "";
+  // Only mark cookies Secure when the public app URL is HTTPS.
+  // Local HTTP deployments (npm start + APP_URL=http://...) must still receive the session cookie.
+  return appUrl.startsWith("https://");
+}
+
 export type Session = { userId: string; role: Role; email: string };
 
 export async function createSessionToken(session: Session) {
@@ -25,7 +32,7 @@ export async function setSessionCookie(token: string) {
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 12,
