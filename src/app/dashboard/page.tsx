@@ -3,22 +3,24 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import LogoutButton from "@/components/LogoutButton";
+import SupportContacts from "@/components/SupportContacts";
 import { formatPerson, priorityLabel, statusLabel, directionLabel } from "@/lib/labels";
 
 export default async function Dashboard() {
   const s = await getSession();
   if (!s) redirect("/login");
-  const where = s.role === "USER" ? { requesterId: s.userId } : {};
+  const isStaff = s.role === "ADMIN" || s.role === "TECHNICIAN";
+  const where = isStaff ? {} : { requesterId: s.userId };
   const me = await db.user.findUnique({
     where: { id: s.userId },
     select: { name: true, username: true, role: true },
   });
-  const [tickets, newCount, progress, waiting] = await Promise.all([
+  const [tickets, newCount, progress, waiting, admins] = await Promise.all([
     db.ticket.findMany({
       where,
       include: {
         category: true,
-        assignee: { select: { name: true, username: true } },
+        assignee: { select: { name: true, username: true, email: true } },
         requester: { select: { name: true, username: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -27,6 +29,13 @@ export default async function Dashboard() {
     db.ticket.count({ where: { ...where, status: "NEW" } }),
     db.ticket.count({ where: { ...where, status: "IN_PROGRESS" } }),
     db.ticket.count({ where: { ...where, status: "WAITING_FOR_USER" } }),
+    !isStaff
+      ? db.user.findMany({
+          where: { isActive: true, role: "ADMIN" },
+          select: { id: true, name: true, username: true, email: true, role: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -34,7 +43,7 @@ export default async function Dashboard() {
       <header className="top">
         <div>
           <p className="muted">IT HELP DESK</p>
-          <h1>{s.role === "USER" ? "Мои заявки" : "Панель специалиста"}</h1>
+          <h1>{isStaff ? "Панель специалиста" : "Мои заявки"}</h1>
           <p className="muted">{formatPerson(me?.name, me?.username)}</p>
         </div>
         <div className="actionRow" style={{ marginBottom: 0 }}>
@@ -60,36 +69,69 @@ export default async function Dashboard() {
         </div>
         <div className="card">
           <b>{waiting}</b>
-          <p className="muted">Ожидают ответа</p>
+          <p className="muted">{isStaff ? "Ожидают ответа" : "Ждут вашего ответа"}</p>
         </div>
       </section>
+
+      {!isStaff && (
+        <section className="section">
+          <SupportContacts contacts={admins} title="Контакты администраторов IT" />
+        </section>
+      )}
+
       <section className="card tableCard">
         <table>
           <thead>
             <tr>
               <th>№</th>
               <th>Тема</th>
+              {isStaff && <th>Автор</th>}
               <th>Категория</th>
-              <th>Направление</th>
+              {isStaff && <th>Направление</th>}
               <th>Приоритет</th>
               <th>Статус</th>
-              <th>Специалист</th>
+              <th>{isStaff ? "Специалист" : "Кто решает"}</th>
             </tr>
           </thead>
           <tbody>
-            {tickets.map((t) => (
-              <tr key={t.id}>
-                <td>
-                  <Link href={`/tickets/${t.id}`}>HD-{t.number}</Link>
+            {tickets.length === 0 ? (
+              <tr>
+                <td colSpan={isStaff ? 8 : 6} className="muted">
+                  {isStaff ? "Заявок пока нет." : "У вас пока нет заявок. Создайте первую."}
                 </td>
-                <td>{t.subject}</td>
-                <td>{t.category.name}</td>
-                <td>{directionLabel[t.direction]}</td>
-                <td>{priorityLabel[t.priority]}</td>
-                <td>{statusLabel[t.status]}</td>
-                <td>{formatPerson(t.assignee?.name, t.assignee?.username)}</td>
               </tr>
-            ))}
+            ) : (
+              tickets.map((t) => (
+                <tr key={t.id}>
+                  <td>
+                    <Link href={`/tickets/${t.id}`}>HD-{t.number}</Link>
+                  </td>
+                  <td>{t.subject}</td>
+                  {isStaff && <td>{formatPerson(t.requester.name, t.requester.username)}</td>}
+                  <td>{t.category.name}</td>
+                  {isStaff && <td>{directionLabel[t.direction]}</td>}
+                  <td>{priorityLabel[t.priority]}</td>
+                  <td>{statusLabel[t.status]}</td>
+                  <td>
+                    {t.assignee ? (
+                      <>
+                        {formatPerson(t.assignee.name, t.assignee.username)}
+                        {!isStaff && t.assignee.email ? (
+                          <>
+                            <br />
+                            <a href={`mailto:${t.assignee.email}`} className="muted">
+                              {t.assignee.email}
+                            </a>
+                          </>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="muted">Ещё не назначен</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </section>
