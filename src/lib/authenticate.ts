@@ -8,6 +8,7 @@ import {
   syntheticEmail,
 } from "@/lib/domain-login";
 import { authenticateWithLdap, isLdapConfigured } from "@/lib/ldap-auth";
+import { isUsernameInAdminOu, lookupSyncedAdUser } from "@/lib/ldap-sync";
 
 export type AuthUser = {
   id: string;
@@ -120,6 +121,11 @@ async function authenticateLocal(parsed: ReturnType<typeof parseDomainLogin>, pa
 
 async function authenticateLdapAndSync(parsed: ReturnType<typeof parseDomainLogin>, password: string): Promise<AuthUser> {
   const profile = await authenticateWithLdap(parsed, password);
+  const synced = await lookupSyncedAdUser(profile.username).catch(() => null);
+  const department =
+    profile.department || synced?.department || synced?.ouName || undefined;
+  const inAdminOu = await isUsernameInAdminOu(profile.username).catch(() => false);
+
   const orgId = await resolveOrganizationId({
     company: profile.organization,
     domain: profile.domain,
@@ -134,14 +140,16 @@ async function authenticateLdapAndSync(parsed: ReturnType<typeof parseDomainLogi
 
   if (existing) {
     if (!existing.isActive) throw new Error("INVALID_CREDENTIALS");
+    const nextRole = inAdminOu && existing.role !== Role.ADMIN ? Role.ADMIN : existing.role;
     const updated = await db.user.update({
       where: { id: existing.id },
       data: {
         username: profile.username,
         name: profile.name || existing.name,
         email: existing.email || profile.email,
-        department: profile.department ?? existing.department,
+        department: department ?? existing.department,
         organizationId: orgId ?? existing.organizationId,
+        role: nextRole,
       },
     });
     return {
@@ -160,8 +168,8 @@ async function authenticateLdapAndSync(parsed: ReturnType<typeof parseDomainLogi
       username: profile.username,
       name: profile.name,
       passwordHash: randomHash,
-      role: Role.USER,
-      department: profile.department,
+      role: inAdminOu ? Role.ADMIN : Role.USER,
+      department,
       organizationId: orgId,
     },
   });

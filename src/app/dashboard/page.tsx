@@ -48,9 +48,14 @@ export default async function Dashboard() {
         </div>
         <div className="actionRow" style={{ marginBottom: 0 }}>
           {s.role === "ADMIN" && (
-            <Link className="button secondary" href="/admin/organizations">
-              Организации
-            </Link>
+            <>
+              <Link className="button secondary" href="/admin/ad">
+                Active Directory
+              </Link>
+              <Link className="button secondary" href="/admin/organizations">
+                Организации
+              </Link>
+            </>
           )}
           <Link className="button" href="/tickets/new">
             + Новая заявка
