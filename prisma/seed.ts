@@ -11,13 +11,19 @@ async function main() {
   const passwordHash = await bcrypt.hash(password, 12);
 
   for (const name of categories) await db.category.upsert({ where: { name }, update: {}, create: { name } });
-  const users: Array<[string,string,Role]> = [
-    ["admin@example.local","Help Desk Admin",Role.ADMIN],
-    ["tech@example.local","IT Technician",Role.TECHNICIAN],
-    ["user@example.local","Demo User",Role.USER],
+  const users: Array<[string, string, string, Role]> = [
+    ["admin@example.local", "admin", "Help Desk Admin", Role.ADMIN],
+    ["tech@example.local", "tech", "IT Technician", Role.TECHNICIAN],
+    ["user@example.local", "user", "Demo User", Role.USER],
   ];
-  for (const [email,name,role] of users) await db.user.upsert({ where: { email }, update: { name, role }, create: { email, name, role, passwordHash } });
-  console.log("Development seed completed. Password came from SEED_PASSWORD and was not stored in source code.");
+  for (const [email, username, name, role] of users) {
+    await db.user.upsert({
+      where: { email },
+      update: { name, role, username, passwordHash },
+      create: { email, username, name, role, passwordHash },
+    });
+  }
+  console.log("Development seed completed. Domain logins: energo\\admin, energo\\tech, energo\\user (password from SEED_PASSWORD).");
 }
 
 main().finally(() => db.$disconnect());

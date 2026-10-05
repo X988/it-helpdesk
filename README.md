@@ -9,6 +9,7 @@ Internal IT Service Desk for ticket intake, assignment, collaboration, attachmen
 - Tailwind CSS (via app styles)
 - Telegram Bot API
 - S3-compatible object storage
+- Optional Active Directory / LDAP login
 
 ## Local setup
 
@@ -23,11 +24,44 @@ npm start
 # or: npm run dev
 ```
 
-Development seed accounts (password from `SEED_PASSWORD`):
+### Login (domain credentials)
 
-- `admin@example.local` — ADMIN
-- `tech@example.local` — TECHNICIAN
-- `user@example.local` — USER
+UI expects NetBIOS-style logins with default domain **energo**:
+
+- `energo\admin` — ADMIN
+- `energo\tech` — TECHNICIAN
+- `energo\user` — USER
+
+Password comes from `SEED_PASSWORD` (local/dev fallback when `LDAP_URL` is not set).
+
+API accepts either:
+
+```json
+{ "login": "energo\\admin", "password": "..." }
+```
+
+or
+
+```json
+{ "domain": "energo", "username": "admin", "password": "..." }
+```
+
+Legacy `{ "email": "admin@example.local", "password": "..." }` is still accepted and mapped to username `admin`.
+
+### Active Directory
+
+When `LDAP_URL` is set, the app binds to AD and then finds/creates a local `User` row (default role `USER`). Roles `ADMIN` / `TECHNICIAN` are assigned in the database after the first login.
+
+Required for real AD:
+
+| Variable | Example | Purpose |
+|---|---|---|
+| `LDAP_URL` | `ldap://dc01.energo.local:389` | Domain controller |
+| `LDAP_BASE_DN` | `DC=energo,DC=local` | Search base |
+| `LDAP_DOMAIN` | `energo` | NetBIOS domain (must match login) |
+| `LDAP_UPN_SUFFIX` | `energo.local` | Preferred bind as `user@energo.local` |
+| `LDAP_BIND_DN` / `LDAP_BIND_PASSWORD` | service account | Optional profile lookup after user bind |
+| `LDAP_EMAIL_DOMAIN` | `energo.local` | Synthetic email if AD has no `mail` |
 
 ## Scripts
 
