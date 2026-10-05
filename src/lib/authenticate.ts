@@ -159,7 +159,12 @@ export async function authenticateDomainLogin(body: unknown): Promise<AuthUser> 
       return await authenticateLdapAndSync(parsed, normalized.password);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      if (msg === "INVALID_CREDENTIALS" || msg.includes("Invalid Credentials") || msg.includes("INVALID_CREDENTIALS")) {
+      if (
+        msg === "INVALID_CREDENTIALS" ||
+        /invalid credentials/i.test(msg) ||
+        /AcceptSecurityContext/i.test(msg) ||
+        /\bdata 52e\b/i.test(msg)
+      ) {
         throw new Error("INVALID_CREDENTIALS");
       }
       // Network/config errors should not leak details to the client.

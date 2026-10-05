@@ -31,15 +31,47 @@ function ldapConfig() {
   };
 }
 
+function createClient(cfg: ReturnType<typeof ldapConfig>) {
+  return new Client({
+    url: cfg.url,
+    timeout: 10_000,
+    connectTimeout: 10_000,
+    tlsOptions: { rejectUnauthorized: cfg.tlsRejectUnauthorized },
+  });
+}
+
+async function safeUnbind(client: Client) {
+  try {
+    await client.unbind();
+  } catch {
+    /* ignore */
+  }
+}
+
+function isInvalidCredentialsError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  const name = err instanceof Error ? err.name : "";
+  return (
+    name === "InvalidCredentialsError" ||
+    /invalid credentials/i.test(msg) ||
+    /AcceptSecurityContext/i.test(msg) ||
+    /\bdata 52e\b/i.test(msg) ||
+    /\b0x31\b/.test(msg)
+  );
+}
+
 /**
  * Authenticate against Active Directory / LDAP.
- * Bind strategies tried in order:
+ * Bind strategies tried in order (fresh TCP connection each time — AD often
+ * resets the socket after a failed bind):
  * 1) user@UPN_SUFFIX (if LDAP_UPN_SUFFIX set)
  * 2) DOMAIN\username
- * 3) username@domain.local (synthetic)
+ * 3) username@domain.local (synthetic), if different from (1)
  *
  * Optional service bind (LDAP_BIND_DN) is used only to look up profile attributes
  * after a successful user bind; if absent, attributes may be minimal.
+ * User-bind alone is enough to sign in.
  */
 export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: string): Promise<LdapProfile> {
   if (!password) throw new Error("INVALID_CREDENTIALS");
@@ -49,37 +81,30 @@ export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: 
     throw new Error("INVALID_CREDENTIALS");
   }
 
-  const client = new Client({
-    url: cfg.url,
-    timeout: 10_000,
-    connectTimeout: 10_000,
-    tlsOptions: { rejectUnauthorized: cfg.tlsRejectUnauthorized },
-  });
+  const upn = cfg.upnSuffix ? `${parsed.username}@${cfg.upnSuffix}` : "";
+  const netbios = `${parsed.domain}\\${parsed.username}`;
+  const syntheticUpn = `${parsed.username}@${cfg.upnSuffix || `${parsed.domain}.local`}`;
+  const bindCandidates = [...new Set([upn, netbios, syntheticUpn].filter(Boolean))];
 
-  const bindCandidates = [
-    cfg.upnSuffix ? `${parsed.username}@${cfg.upnSuffix}` : "",
-    `${parsed.domain}\\${parsed.username}`,
-    `${parsed.username}@${cfg.upnSuffix || `${parsed.domain}.local`}`,
-  ].filter(Boolean);
-
-  let boundAs = "";
+  let boundClient: Client | null = null;
   let lastError: unknown;
+  let sawInvalidCredentials = false;
+
   for (const dn of bindCandidates) {
+    const client = createClient(cfg);
     try {
       await client.bind(dn, password);
-      boundAs = dn;
+      boundClient = client;
       break;
     } catch (err) {
+      if (isInvalidCredentialsError(err)) sawInvalidCredentials = true;
       lastError = err;
+      await safeUnbind(client);
     }
   }
 
-  if (!boundAs) {
-    try {
-      await client.unbind();
-    } catch {
-      /* ignore */
-    }
+  if (!boundClient) {
+    if (sawInvalidCredentials) throw new Error("INVALID_CREDENTIALS");
     throw lastError instanceof Error ? lastError : new Error("INVALID_CREDENTIALS");
   }
 
@@ -92,10 +117,10 @@ export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: 
     if (cfg.baseDn) {
       // Re-bind with service account for search if provided (user bind may lack search rights).
       if (cfg.bindDn && cfg.bindPassword) {
-        await client.bind(cfg.bindDn, cfg.bindPassword);
+        await boundClient.bind(cfg.bindDn, cfg.bindPassword);
       }
       const filter = cfg.searchFilter.replaceAll("{{username}}", parsed.username.replace(/[\\*()]/g, "\\$&"));
-      const { searchEntries } = await client.search(cfg.baseDn, {
+      const { searchEntries } = await boundClient.search(cfg.baseDn, {
         scope: "sub",
         filter,
         attributes: ["dn", "cn", "displayName", "mail", "department", "company", "sAMAccountName"],
@@ -117,11 +142,7 @@ export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: 
   } catch {
     // Profile lookup is best-effort; successful bind is enough to sign in.
   } finally {
-    try {
-      await client.unbind();
-    } catch {
-      /* ignore */
-    }
+    await safeUnbind(boundClient);
   }
 
   return {
