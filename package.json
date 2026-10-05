@@ -19,6 +19,7 @@
     "@prisma/client": "6.16.2",
     "bcryptjs": "latest",
     "jose": "latest",
+    "ldapts": "^4.2.6",
     "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
