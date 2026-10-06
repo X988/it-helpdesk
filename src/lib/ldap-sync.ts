@@ -24,8 +24,8 @@ function ldapConfig() {
   return {
     url,
     baseDn: process.env.LDAP_BASE_DN?.trim() || "",
-    domain: (process.env.LDAP_DOMAIN || "energo").toLowerCase(),
-    upnSuffix: process.env.LDAP_UPN_SUFFIX?.trim() || "energo.local",
+    domain: (process.env.LDAP_DOMAIN || "").trim().toLowerCase(),
+    upnSuffix: process.env.LDAP_UPN_SUFFIX?.trim() || "",
     bindDn: process.env.LDAP_BIND_DN?.trim() || "",
     bindPassword: process.env.LDAP_BIND_PASSWORD || "",
     tlsRejectUnauthorized: process.env.LDAP_TLS_REJECT_UNAUTHORIZED !== "false",

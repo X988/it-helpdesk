@@ -22,7 +22,7 @@ function ldapConfig() {
   return {
     url,
     baseDn: process.env.LDAP_BASE_DN?.trim() || "",
-    domain: (process.env.LDAP_DOMAIN || "energo").toLowerCase(),
+    domain: (process.env.LDAP_DOMAIN || "").trim().toLowerCase(),
     upnSuffix: process.env.LDAP_UPN_SUFFIX?.trim() || "",
     bindDn: process.env.LDAP_BIND_DN?.trim() || "",
     bindPassword: process.env.LDAP_BIND_PASSWORD || "",
@@ -119,10 +119,6 @@ async function searchProfile(
 export async function authenticateWithLdap(parsed: ParsedDomainLogin, password: string): Promise<LdapProfile> {
   if (!password) throw new Error("INVALID_CREDENTIALS");
   const cfg = ldapConfig();
-  const expectedDomain = cfg.domain.toLowerCase();
-  if (parsed.domain !== expectedDomain) {
-    throw new Error("INVALID_CREDENTIALS");
-  }
 
   const upn = cfg.upnSuffix ? `${parsed.username}@${cfg.upnSuffix}` : "";
   const netbios = `${parsed.domain}\\${parsed.username}`;

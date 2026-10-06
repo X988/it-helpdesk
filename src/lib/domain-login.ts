@@ -1,5 +1,5 @@
-/** Default AD NetBIOS domain for the energo network. */
-export const DEFAULT_DOMAIN = (process.env.LDAP_DOMAIN || "energo").toLowerCase();
+/** NetBIOS domain of this installation. Empty until LDAP_DOMAIN is set — never a built-in company name. */
+export const DEFAULT_DOMAIN = (process.env.LDAP_DOMAIN || "").trim().toLowerCase();
 
 export type ParsedDomainLogin = {
   domain: string;

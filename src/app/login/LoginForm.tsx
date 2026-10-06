@@ -55,38 +55,34 @@ export default function LoginForm({
         <form onSubmit={submit} autoComplete="off">
           <label>
             Домен
-            {domains.length > 0 ? (
-              <select
-                name="domain"
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                aria-label="Домен"
-                required
-              >
-                {domains.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                name="domain"
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                aria-label="Домен"
-                placeholder="короткое имя домена"
-                required
-                autoCapitalize="none"
-              />
-            )}
+            <input
+              name="domain"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value.trim().toLowerCase())}
+              aria-label="Домен"
+              placeholder="короткое имя домена"
+              list="login-domains"
+              required
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <datalist id="login-domains">
+              {domains.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </datalist>
           </label>
           <label>
             Имя пользователя
             <div className="domainLogin">
-              <span className="domainPrefix" aria-hidden>
-                {domain}\
-              </span>
+              {domain ? (
+                <span className="domainPrefix" aria-hidden>
+                  {domain}\
+                </span>
+              ) : null}
               <input
                 name="username"
                 type="text"

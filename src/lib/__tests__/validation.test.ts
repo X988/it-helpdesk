@@ -93,8 +93,8 @@ describe("parseDomainLogin", () => {
     });
   });
 
-  it("defaults domain to energo", () => {
-    expect(parseDomainLogin({ username: "user" }).domain).toBe("energo");
+  it("does not invent a domain when none is configured", () => {
+    expect(() => parseDomainLogin({ username: "user" })).toThrow("INVALID_LOGIN");
   });
 
   it("builds synthetic email", () => {
