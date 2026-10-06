@@ -37,9 +37,9 @@ export default async function Home() {
     );
     if (session.role === "ADMIN") {
       cards.push({
-        href: "/admin/organizations",
-        title: "Организации",
-        text: "Добавление и правка организаций (например КП (energo)).",
+        href: "/admin/users",
+        title: "Роли",
+        text: "Назначить администратора или сотрудника техподдержки.",
       });
     }
   }

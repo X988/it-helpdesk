@@ -53,6 +53,7 @@ export default async function Dashboard() {
           {isStaff && <Link className="button secondary" href="/queue">Очередь</Link>}
           {s.role === "ADMIN" && (
             <>
+              <Link className="button secondary" href="/admin/users">Роли</Link>
               <Link className="button secondary" href="/admin/sla">SLA</Link>
               <Link className="button secondary" href="/admin/ad">
                 Active Directory

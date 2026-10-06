@@ -24,8 +24,8 @@ export const directionLabel: Record<TaskDirection, string> = {
 
 export const roleLabel: Record<Role, string> = {
   USER: "Пользователь",
-  TECHNICIAN: "Техник",
-  ADMIN: "Админ",
+  TECHNICIAN: "Техподдержка",
+  ADMIN: "Администратор",
 };
 
 /** Display "Имя (логин)" — falls back to name or login alone. */
