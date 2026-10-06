@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { canReadTicket } from "@/lib/ticket-access";
+import { isStaffRole } from "@/lib/roles";
 import TicketActions from "./TicketActions";
 import LogoutButton from "@/components/LogoutButton";
 import SupportContacts from "@/components/SupportContacts";
@@ -31,7 +32,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
   });
   if (!actor?.isActive) redirect("/login");
   const { id } = await params;
-  const isStaff = actor.role === "ADMIN" || actor.role === "TECHNICIAN";
+  const isStaff = isStaffRole(actor.role);
   const t = await db.ticket.findUnique({
     where: { id },
     include: {

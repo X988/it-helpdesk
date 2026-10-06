@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { canReadTicket, canWriteInternal } from "@/lib/ticket-access";
+import { isStaffRole } from "@/lib/roles";
 import { messageCreateSchema } from "@/lib/validation";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (
         parsed.data.visibility === "PUBLIC" &&
         !ticket.firstResponseAt &&
-        (session.role === "TECHNICIAN" || session.role === "ADMIN")
+        isStaffRole(session.role)
       ) {
         await tx.ticket.updateMany({
           where: { id, firstResponseAt: null },

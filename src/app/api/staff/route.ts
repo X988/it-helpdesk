@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { STAFF_ROLES } from "@/lib/roles";
 
 export async function GET() {
   try {
-    await requireRole(["TECHNICIAN", "ADMIN"]);
+    await requireRole(STAFF_ROLES);
     const staff = await db.user.findMany({
-      where: { isActive: true, role: { in: ["TECHNICIAN", "ADMIN"] } },
+      where: { isActive: true, role: { in: STAFF_ROLES } },
       select: { id: true, name: true, username: true, role: true },
       orderBy: [{ name: "asc" }],
     });

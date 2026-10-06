@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { STAFF_ROLES } from "@/lib/roles";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireRole(["TECHNICIAN", "ADMIN"]);
+    const session = await requireRole(STAFF_ROLES);
     const { id } = await context.params;
     const current = await db.ticket.findUnique({
       where: { id },

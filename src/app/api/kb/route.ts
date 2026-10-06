@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
+import { STAFF_ROLES } from "@/lib/roles";
 import { kbSchema } from "@/lib/validation";
 
 function slugify(title: string) {
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireRole(["TECHNICIAN", "ADMIN"]);
+    const session = await requireRole(STAFF_ROLES);
     const parsed = kbSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "VALIDATION_ERROR" }, { status: 400 });
     const base = slugify(parsed.data.title);

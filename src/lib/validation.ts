@@ -74,7 +74,7 @@ export const departmentAdminSchema = z.object({
 });
 
 export const userAdminSchema = z.object({
-  role: z.enum(["USER", "TECHNICIAN", "ADMIN"]).optional(),
+  role: z.enum(["USER", "TECHNICIAN", "PROGRAMMER", "ADMIN"]).optional(),
   departmentId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional(),
 });

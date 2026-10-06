@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { STAFF_ROLES } from "@/lib/roles";
 import { canReadTicket } from "@/lib/ticket-access";
 import { priorityChangeSchema } from "@/lib/validation";
 import { initialDeadlines, pauseResolve, spentResolveMinutes, addMinutes, type CalendarMode } from "@/lib/sla";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireRole(["TECHNICIAN", "ADMIN"]);
+    const session = await requireRole(STAFF_ROLES);
     const { id } = await context.params;
     const parsed = priorityChangeSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "VALIDATION_ERROR" }, { status: 400 });

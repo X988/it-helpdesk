@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { STAFF_ROLES, isStaffRole } from "@/lib/roles";
 import { assignSchema } from "@/lib/validation";
 import { canReadTicket } from "@/lib/ticket-access";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireRole(["TECHNICIAN", "ADMIN"]);
+    const session = await requireRole(STAFF_ROLES);
     const { id } = await context.params;
     const parsed = assignSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "Invalid assignee" }, { status: 400 });
@@ -15,7 +16,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       where: {
         id: parsed.data.assigneeId,
         isActive: true,
-        role: { in: ["TECHNICIAN", "ADMIN"] },
+        role: { in: STAFF_ROLES },
       },
       select: { id: true, departmentId: true },
     });
@@ -30,7 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
     if (
-      session.role === "TECHNICIAN" &&
+      isStaffRole(session.role) && session.role !== "ADMIN" &&
       assignee.departmentId &&
       current.departmentId &&
       assignee.departmentId !== current.departmentId

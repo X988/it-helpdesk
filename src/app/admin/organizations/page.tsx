@@ -16,7 +16,7 @@ export default async function AdminOrganizationsPage() {
             ← К панели
           </Link>
           <h1>Организации</h1>
-          <p className="muted">Формат отображения: название (домен), например КП (energo)</p>
+          <p className="muted">Домен организации попадает в список на экране входа. Сотрудников можно загрузить из AD или назначить вручную в «Сотрудники».</p>
         </div>
         <LogoutButton />
       </header>

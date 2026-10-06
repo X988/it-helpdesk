@@ -1,4 +1,5 @@
 import type { Role } from "@prisma/client";
+import { isStaffRole } from "@/lib/roles";
 
 export type TicketAcl = {
   requesterId: string;
@@ -30,11 +31,11 @@ export function canReadTicket(
 }
 
 export function canWriteInternal(role: Role) {
-  return role === "TECHNICIAN" || role === "ADMIN";
+  return isStaffRole(role);
 }
 
 export function canManageTicket(role: Role) {
-  return role === "TECHNICIAN" || role === "ADMIN";
+  return isStaffRole(role);
 }
 
 export function staffWhere(actor: { userId: string; role: Role; departmentId?: string | null }) {

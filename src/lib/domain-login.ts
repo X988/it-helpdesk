@@ -81,14 +81,12 @@ export const LOCAL_SEED_USER_MAP: Record<string, string> = {
   user: "user@example.local",
 };
 
-/** Domains shown in the login dropdown. LDAP_DOMAINS=energo,other or LDAP_DOMAIN. */
+/** Domains configured for this installation. Empty until LDAP_DOMAIN or LDAP_DOMAINS is set. */
 export function getLoginDomains(): string[] {
-  const raw = process.env.LDAP_DOMAINS || process.env.LDAP_DOMAIN || DEFAULT_DOMAIN;
+  const raw = process.env.LDAP_DOMAINS || process.env.LDAP_DOMAIN || "";
   const list = raw
     .split(/[,;\s]+/)
     .map((s) => s.trim().toLowerCase())
     .filter((s) => /^[a-z0-9._-]{1,64}$/i.test(s));
-  const unique = [...new Set(list.length ? list : [DEFAULT_DOMAIN])];
-  if (!unique.includes(DEFAULT_DOMAIN)) unique.unshift(DEFAULT_DOMAIN);
-  return unique;
+  return [...new Set(list)];
 }

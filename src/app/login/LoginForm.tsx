@@ -7,7 +7,7 @@ export default function LoginForm({
   domains,
   defaultDomain,
 }: {
-  domains: string[];
+  domains: { value: string; label: string }[];
   defaultDomain: string;
 }) {
   const router = useRouter();
@@ -55,19 +55,31 @@ export default function LoginForm({
         <form onSubmit={submit} autoComplete="off">
           <label>
             Домен
-            <select
-              name="domain"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              aria-label="Домен"
-              required
-            >
-              {domains.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
+            {domains.length > 0 ? (
+              <select
+                name="domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                aria-label="Домен"
+                required
+              >
+                {domains.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                name="domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                aria-label="Домен"
+                placeholder="короткое имя домена"
+                required
+                autoCapitalize="none"
+              />
+            )}
           </label>
           <label>
             Имя пользователя

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import LogoutButton from "@/components/LogoutButton";
 import { db } from "@/lib/db";
 import { formatPerson } from "@/lib/labels";
+import { isStaffRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function Home() {
         select: { name: true, username: true, role: true },
       })
     : null;
-  const isStaff = session && (session.role === "ADMIN" || session.role === "TECHNICIAN");
+  const isStaff = session && isStaffRole(session.role);
   const isUser = session?.role === "USER";
 
   const cards: { href: string; title: string; text: string }[] = [];
@@ -38,8 +39,8 @@ export default async function Home() {
     if (session.role === "ADMIN") {
       cards.push({
         href: "/admin/users",
-        title: "Роли",
-        text: "Назначить администратора или сотрудника техподдержки.",
+        title: "Сотрудники и роли",
+        text: "Разделы, учётные записи, администратор, техподдержка и программист.",
       });
     }
   }

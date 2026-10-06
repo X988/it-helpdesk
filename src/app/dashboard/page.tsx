@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import LogoutButton from "@/components/LogoutButton";
 import SupportContacts from "@/components/SupportContacts";
 import { formatPerson, priorityLabel, statusLabel, directionLabel } from "@/lib/labels";
+import { isStaffRole } from "@/lib/roles";
 
 export default async function Dashboard() {
   const s = await getSession();
@@ -16,7 +17,7 @@ export default async function Dashboard() {
   if (!me?.isActive) redirect("/login");
   const { staffWhere } = await import("@/lib/ticket-access");
   const where = staffWhere({ userId: s.userId, role: me.role, departmentId: me.departmentId });
-  const isStaff = me.role === "ADMIN" || me.role === "TECHNICIAN";
+  const isStaff = isStaffRole(me.role);
   const [tickets, newCount, progress, waiting, admins] = await Promise.all([
     db.ticket.findMany({
       where,
@@ -53,7 +54,7 @@ export default async function Dashboard() {
           {isStaff && <Link className="button secondary" href="/queue">Очередь</Link>}
           {s.role === "ADMIN" && (
             <>
-              <Link className="button secondary" href="/admin/users">Роли</Link>
+              <Link className="button secondary" href="/admin/users">Сотрудники и роли</Link>
               <Link className="button secondary" href="/admin/sla">SLA</Link>
               <Link className="button secondary" href="/admin/ad">
                 Active Directory

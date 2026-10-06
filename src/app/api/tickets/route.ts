@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth";
 import { ticketCreateSchema } from "@/lib/validation";
 import { staffWhere } from "@/lib/ticket-access";
 import { initialDeadlines } from "@/lib/sla";
+import { STAFF_ROLES } from "@/lib/roles";
 import type { Prisma, TicketStatus, Priority } from "@prisma/client";
 
 export async function GET(request: Request) {
@@ -129,8 +130,8 @@ export async function POST(request: Request) {
       });
       const staff = await tx.user.findMany({
         where: departmentId
-          ? { isActive: true, OR: [{ role: "ADMIN" }, { role: "TECHNICIAN", departmentId }] }
-          : { isActive: true, role: { in: ["TECHNICIAN", "ADMIN"] } },
+          ? { isActive: true, OR: [{ role: "ADMIN" }, { role: { in: ["TECHNICIAN", "PROGRAMMER"] }, departmentId }] }
+          : { isActive: true, role: { in: STAFF_ROLES } },
         select: { id: true, email: true },
       });
       if (staff.length) {

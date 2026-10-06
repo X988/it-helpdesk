@@ -25,6 +25,7 @@ export const directionLabel: Record<TaskDirection, string> = {
 export const roleLabel: Record<Role, string> = {
   USER: "Пользователь",
   TECHNICIAN: "Техподдержка",
+  PROGRAMMER: "Программист",
   ADMIN: "Администратор",
 };
 

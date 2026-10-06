@@ -92,18 +92,30 @@ DEFAULT_HOST="$(hostname -I 2>/dev/null | awk '{print $1}')"
 DEFAULT_HOST="${DEFAULT_HOST:-127.0.0.1}"
 ask HELPDESK_PUBLIC_HOST "Адрес сервера, как его открывают сотрудники (IP или DNS)" "$DEFAULT_HOST"
 ask HTTPS_PORT "Внешний HTTPS-порт nginx" "8443"
-ask LDAP_URL "LDAP URL (пустая строка или «-» — без Active Directory)" "${LDAP_URL:-ldaps://SERV1.energo.local:636}"
+ask LDAP_URL "LDAP URL контроллера домена (пустая строка или «-» — без AD). Пример: ldaps://dc.company.local:636" "${LDAP_URL:-}"
 if [[ "$LDAP_URL" == "-" ]]; then
   LDAP_URL=""
 fi
+DISCOVERED_BASE=""
+DISCOVERED_DOMAIN=""
+DISCOVERED_UPN=""
+if [[ -n "$LDAP_URL" ]] && command -v ldapsearch >/dev/null 2>&1; then
+  DISCOVERED_BASE="$(ldapsearch -x -LLL -o nettimeout=3 -H "$LDAP_URL" -s base -b "" defaultNamingContext 2>/dev/null | sed -n 's/^defaultNamingContext:[[:space:]]*//p' | head -1 | tr -d '\r')"
+  if [[ -n "$DISCOVERED_BASE" ]]; then
+    DISCOVERED_UPN="$(printf '%s\n' "$DISCOVERED_BASE" | tr ',' '\n' | sed -n 's/^[Dd][Cc]=//p' | paste -sd. -)"
+    DISCOVERED_DOMAIN="${DISCOVERED_UPN%%.*}"
+    log "Контроллер ответил: $DISCOVERED_BASE"
+  fi
+fi
 if [[ -n "$LDAP_URL" ]]; then
-  ask LDAP_BASE_DN "LDAP base DN" "${LDAP_BASE_DN:-DC=energo,DC=local}"
-  ask LDAP_DOMAIN "Короткое имя домена (energo\\ivanov)" "${LDAP_DOMAIN:-energo}"
-  ask LDAP_UPN_SUFFIX "UPN-суффикс" "${LDAP_UPN_SUFFIX:-energo.local}"
-  ask LDAP_EMAIL_DOMAIN "Домен почты, если в AD нет mail" "${LDAP_EMAIL_DOMAIN:-$LDAP_UPN_SUFFIX}"
+  ask LDAP_BASE_DN "LDAP base DN" "${LDAP_BASE_DN:-$DISCOVERED_BASE}"
+  ask LDAP_DOMAIN "Короткое имя домена в логине DOMAIN\\user" "${LDAP_DOMAIN:-$DISCOVERED_DOMAIN}"
+  ask LDAP_UPN_SUFFIX "UPN-суффикс" "${LDAP_UPN_SUFFIX:-$DISCOVERED_UPN}"
+  ask LDAP_EMAIL_DOMAIN "Домен почты, если в AD нет mail" "${LDAP_EMAIL_DOMAIN:-${LDAP_UPN_SUFFIX:-$DISCOVERED_UPN}}"
+  [[ -n "$LDAP_DOMAIN" ]] || die "Укажите короткое имя домена"
 else
   LDAP_BASE_DN=""
-  LDAP_DOMAIN="${LDAP_DOMAIN:-energo}"
+  LDAP_DOMAIN="${LDAP_DOMAIN:-}"
   LDAP_UPN_SUFFIX=""
   LDAP_EMAIL_DOMAIN=""
 fi
@@ -241,7 +253,7 @@ sudo -u "$APP_USER" bash -c "
 "
 
 log "Отделы, категории и организация"
-ORG_DOMAIN="${LDAP_DOMAIN:-energo}"
+ORG_DOMAIN="${LDAP_DOMAIN:-}"
 sudo -u postgres psql -d helpdesk -v ON_ERROR_STOP=1 \
   -v org_name="$ORG_NAME" \
   -v org_domain="$ORG_DOMAIN" <<'SQL'
@@ -281,7 +293,8 @@ WHERE d.name = 'IT-поддержка'
 
 INSERT INTO "Organization" (id, name, domain, "isActive", "createdAt", "updatedAt")
 SELECT gen_random_uuid(), :'org_name', :'org_domain', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-WHERE NOT EXISTS (
+WHERE :'org_name' <> '' AND :'org_domain' <> ''
+  AND NOT EXISTS (
   SELECT 1 FROM "Organization" o WHERE o.name = :'org_name' AND o.domain = :'org_domain'
 );
 SQL
