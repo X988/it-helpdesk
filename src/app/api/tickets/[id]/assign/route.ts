@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { assignSchema } from "@/lib/validation";
+import { canReadTicket } from "@/lib/ticket-access";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -16,15 +17,26 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         isActive: true,
         role: { in: ["TECHNICIAN", "ADMIN"] },
       },
-      select: { id: true },
+      select: { id: true, departmentId: true },
     });
     if (!assignee) return NextResponse.json({ error: "Assignee not found" }, { status: 400 });
 
     const current = await db.ticket.findUnique({
       where: { id },
-      select: { id: true, assigneeId: true, status: true },
+      select: { id: true, assigneeId: true, status: true, requesterId: true, departmentId: true },
     });
     if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!canReadTicket(session.role, session.userId, current, session.departmentId)) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+    if (
+      session.role === "TECHNICIAN" &&
+      assignee.departmentId &&
+      current.departmentId &&
+      assignee.departmentId !== current.departmentId
+    ) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
     if (current.status === "CLOSED" || current.status === "CANCELLED") {
       return NextResponse.json({ error: "Ticket closed" }, { status: 409 });
     }

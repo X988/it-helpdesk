@@ -34,8 +34,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       },
     });
     if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!canReadTicket(session.role, session.userId, ticket.requesterId)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!canReadTicket(session.role, session.userId, ticket, session.departmentId)) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
     return NextResponse.json({ ticket });
   } catch {

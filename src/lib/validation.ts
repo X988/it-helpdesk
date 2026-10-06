@@ -31,7 +31,7 @@ export const loginSchema = z
   });
 
 export const ticketCreateSchema = z.object({
-  subject: z.string().trim().min(3).max(160),
+  subject: z.string().trim().min(5).max(120),
   description: z.string().trim().min(5).max(10000),
   categoryId: z.string().uuid(),
   priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).default("NORMAL"),
@@ -48,6 +48,56 @@ export const statusChangeSchema = z.object({
   status: z.enum(["IN_PROGRESS", "WAITING_FOR_USER", "RESOLVED", "CLOSED", "CANCELLED"]),
   workMinutes: z.number().int().min(1).max(100000).optional(),
   workHours: z.number().min(0).max(1000).optional(),
+  comment: z.string().trim().min(1).max(10000).optional(),
+  waitingReasonType: z.enum(["USER", "EXTERNAL", "VENDOR", "OTHER"]).optional(),
+  waitingReasonText: z.string().trim().max(500).optional(),
+  cancelReasonType: z.enum(["DUPLICATE", "INVALID_REQUEST", "NOT_REQUIRED", "OTHER"]).optional(),
+  cancelReasonText: z.string().trim().max(500).optional(),
+});
+
+export const priorityChangeSchema = z.object({
+  priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]),
+});
+
+export const categoryAdminSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  ownerDepartmentId: z.string().uuid().nullable().optional(),
+  isActive: z.boolean().optional(),
+  isHidden: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(10000).optional(),
+});
+
+export const departmentAdminSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(300).optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
+export const userAdminSchema = z.object({
+  role: z.enum(["USER", "TECHNICIAN", "ADMIN"]).optional(),
+  departmentId: z.string().uuid().nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const cannedSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  body: z.string().trim().min(1).max(10000),
+  categoryId: z.string().uuid().nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const kbSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  body: z.string().trim().min(1).max(20000),
+  categoryId: z.string().uuid().nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+  status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
+});
+
+export const slaPolicySchema = z.object({
+  responseMinutes: z.number().int().min(1).max(200000),
+  resolveMinutes: z.number().int().min(1).max(500000),
+  calendarMode: z.enum(["BUSINESS_TIME", "CALENDAR_TIME"]),
 });
 
 export const assignSchema = z.object({

@@ -27,6 +27,7 @@ export default async function Home() {
     cards.push(
       { href: "/tickets/new", title: "Новая заявка", text: "Опишите проблему, выберите категорию и приложите скриншоты." },
       { href: "/dashboard", title: "Мои заявки", text: "Статус ваших заявок, специалист и чат с поддержкой." },
+      { href: "/kb", title: "База знаний", text: "Поиск готовых ответов до создания заявки." },
     );
   } else if (isStaff) {
     cards.push(

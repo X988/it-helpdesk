@@ -59,7 +59,7 @@ export default function TicketActions({
     router.refresh();
   }
 
-  async function status(value: string) {
+  async function status(value: string, extra: Record<string, string> = {}) {
     setError("");
     const needsTime = value === "RESOLVED" || value === "CLOSED";
     const minutes = totalMinutes() ?? currentWorkMinutes;
@@ -70,7 +70,7 @@ export default function TicketActions({
     const r = await fetch(`/api/tickets/${id}/status`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status: value, workMinutes: minutes ?? undefined }),
+      body: JSON.stringify({ status: value, workMinutes: minutes ?? undefined, ...extra }),
     });
     if (!r.ok) {
       const data = await r.json().catch(() => ({}));
@@ -133,7 +133,7 @@ export default function TicketActions({
             <button type="button" onClick={claim}>
               Взять в работу
             </button>
-            <button type="button" className="secondary" onClick={() => status("WAITING_FOR_USER")}>
+            <button type="button" className="secondary" onClick={() => status("WAITING_FOR_USER", { waitingReasonType: "USER" })}>
               Ждём пользователя
             </button>
             <button type="button" className="secondary" onClick={() => status("RESOLVED")}>

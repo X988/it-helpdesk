@@ -2,9 +2,9 @@ import type { Priority, TicketStatus, TaskDirection, Role } from "@prisma/client
 
 export const priorityLabel: Record<Priority, string> = {
   LOW: "Низкий",
-  NORMAL: "Обычный",
+  NORMAL: "Средний",
   HIGH: "Высокий",
-  URGENT: "Срочный",
+  URGENT: "Критический",
 };
 
 export const statusLabel: Record<TicketStatus, string> = {

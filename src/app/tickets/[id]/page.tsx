@@ -16,11 +16,22 @@ import {
   roleLabel,
 } from "@/lib/labels";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const ticket = await db.ticket.findUnique({ where: { id }, select: { number: true, subject: true } });
+  return { title: ticket ? `HD-${ticket.number} · ${ticket.subject}` : "Заявка" };
+}
+
 export default async function TicketPage({ params }: { params: Promise<{ id: string }> }) {
   const s = await getSession();
   if (!s) redirect("/login");
+  const actor = await db.user.findUnique({
+    where: { id: s.userId },
+    select: { isActive: true, role: true, departmentId: true },
+  });
+  if (!actor?.isActive) redirect("/login");
   const { id } = await params;
-  const isStaff = s.role === "ADMIN" || s.role === "TECHNICIAN";
+  const isStaff = actor.role === "ADMIN" || actor.role === "TECHNICIAN";
   const t = await db.ticket.findUnique({
     where: { id },
     include: {
@@ -45,7 +56,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
       statusHistory: { orderBy: { createdAt: "asc" } },
     },
   });
-  if (!t || !canReadTicket(s.role, s.userId, t.requesterId)) notFound();
+  if (!t || !canReadTicket(actor.role, s.userId, t, actor.departmentId)) notFound();
   const manage = isStaff;
   const org = t.organization ?? t.requester.organization;
 

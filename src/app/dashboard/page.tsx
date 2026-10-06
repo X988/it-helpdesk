@@ -9,12 +9,14 @@ import { formatPerson, priorityLabel, statusLabel, directionLabel } from "@/lib/
 export default async function Dashboard() {
   const s = await getSession();
   if (!s) redirect("/login");
-  const isStaff = s.role === "ADMIN" || s.role === "TECHNICIAN";
-  const where = isStaff ? {} : { requesterId: s.userId };
   const me = await db.user.findUnique({
     where: { id: s.userId },
-    select: { name: true, username: true, role: true },
+    select: { name: true, username: true, role: true, departmentId: true, isActive: true },
   });
+  if (!me?.isActive) redirect("/login");
+  const { staffWhere } = await import("@/lib/ticket-access");
+  const where = staffWhere({ userId: s.userId, role: me.role, departmentId: me.departmentId });
+  const isStaff = me.role === "ADMIN" || me.role === "TECHNICIAN";
   const [tickets, newCount, progress, waiting, admins] = await Promise.all([
     db.ticket.findMany({
       where,
@@ -47,8 +49,11 @@ export default async function Dashboard() {
           <p className="muted">{formatPerson(me?.name, me?.username)}</p>
         </div>
         <div className="actionRow" style={{ marginBottom: 0 }}>
+          <Link className="button secondary" href="/kb">База знаний</Link>
+          {isStaff && <Link className="button secondary" href="/queue">Очередь</Link>}
           {s.role === "ADMIN" && (
             <>
+              <Link className="button secondary" href="/admin/sla">SLA</Link>
               <Link className="button secondary" href="/admin/ad">
                 Active Directory
               </Link>

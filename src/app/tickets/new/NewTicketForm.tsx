@@ -77,7 +77,7 @@ export default function NewTicketForm() {
         <form onSubmit={submit} className="ticketForm">
           <label>
             Тема
-            <input name="subject" required minLength={3} maxLength={160} />
+            <input name="subject" required minLength={5} maxLength={120} />
           </label>
           <label>
             Категория
@@ -107,9 +107,9 @@ export default function NewTicketForm() {
             Приоритет
             <select name="priority" defaultValue="NORMAL">
               <option value="LOW">Низкий</option>
-              <option value="NORMAL">Обычный</option>
+              <option value="NORMAL">Средний</option>
               <option value="HIGH">Высокий</option>
-              <option value="URGENT">Срочный</option>
+              <option value="URGENT">Критический</option>
             </select>
           </label>
           {orgs.length > 0 && (

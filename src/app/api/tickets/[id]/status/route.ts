@@ -1,42 +1,51 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
-import { canManageTicket } from "@/lib/ticket-access";
+import { canManageTicket, canReadTicket } from "@/lib/ticket-access";
 import { statusChangeSchema } from "@/lib/validation";
-
-const transitions: Record<string, string[]> = {
-  NEW: ["IN_PROGRESS", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_FOR_USER", "RESOLVED", "CANCELLED"],
-  WAITING_FOR_USER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
-  RESOLVED: ["IN_PROGRESS", "CLOSED"],
-  CLOSED: [],
-  CANCELLED: [],
-};
+import { canTransition, isUserTransition } from "@/lib/transitions";
+import { pauseResolve, resumeResolve, type CalendarMode } from "@/lib/sla";
+import { sendTelegram } from "@/lib/telegram";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession();
-    if (!canManageTicket(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const { id } = await context.params;
     const parsed = statusChangeSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    if (!parsed.success) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", details: parsed.error.flatten() }, { status: 400 });
+    }
 
-    const current = await db.ticket.findUnique({
-      where: { id },
-      select: { status: true, workMinutes: true },
-    });
-    if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!transitions[current.status]?.includes(parsed.data.status)) {
-      return NextResponse.json({ error: "Invalid transition" }, { status: 409 });
+    const current = await db.ticket.findUnique({ where: { id } });
+    if (!current) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    if (!canReadTicket(session.role, session.userId, current, session.departmentId)) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+
+    const next = parsed.data.status;
+    const staff = canManageTicket(session.role);
+    const requesterReopen = session.role === "USER" && isUserTransition(current.status, next);
+    if (!staff && !requesterReopen) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    if (session.role === "USER" && current.requesterId !== session.userId) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+    if (!canTransition(current.status, next)) {
+      return NextResponse.json({ error: "INVALID_TRANSITION" }, { status: 409 });
+    }
+    if (next === "IN_PROGRESS" && current.status === "RESOLVED" && !parsed.data.comment) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "Для возврата в работу нужен комментарий" }, { status: 400 });
+    }
+    if (next === "WAITING_FOR_USER" && !parsed.data.waitingReasonType) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "Укажите причину ожидания" }, { status: 400 });
+    }
+    if (next === "CANCELLED" && !parsed.data.cancelReasonType) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "Укажите причину отмены" }, { status: 400 });
     }
 
     let workMinutes = parsed.data.workMinutes;
-    if (parsed.data.workHours != null && workMinutes == null) {
-      workMinutes = Math.round(parsed.data.workHours * 60);
-    }
-
-    const needsTime = parsed.data.status === "RESOLVED" || parsed.data.status === "CLOSED";
-    if (needsTime) {
+    if (parsed.data.workHours != null && workMinutes == null) workMinutes = Math.round(parsed.data.workHours * 60);
+    const needsTime = next === "RESOLVED" || (next === "CLOSED" && staff);
+    if (needsTime && session.role !== "USER") {
       const total = workMinutes ?? current.workMinutes;
       if (total == null || total < 1) {
         return NextResponse.json(
@@ -47,43 +56,87 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       workMinutes = total;
     }
 
+    const now = new Date();
+    const mode = (current.slaCalendarMode ?? "BUSINESS_TIME") as CalendarMode;
+    const slaPatch: Record<string, unknown> = {};
+    if (next === "WAITING_FOR_USER" && current.slaResolveMinutes != null) {
+      Object.assign(
+        slaPatch,
+        pauseResolve({
+          createdAt: current.createdAt,
+          now,
+          pausedMinutes: current.slaPausedMinutes,
+          resolveMinutes: current.slaResolveMinutes,
+          mode,
+        }),
+      );
+    }
+    if (current.status === "WAITING_FOR_USER" && next === "IN_PROGRESS" && current.waitingSince && current.slaRemainingResolveMinutes != null) {
+      Object.assign(
+        slaPatch,
+        resumeResolve({
+          now,
+          waitingSince: current.waitingSince,
+          pausedMinutes: current.slaPausedMinutes,
+          remainingMinutes: current.slaRemainingResolveMinutes,
+          mode,
+        }),
+      );
+    }
+
     const ticket = await db.$transaction(async (tx) => {
       const changed = await tx.ticket.updateMany({
         where: { id, status: current.status },
         data: {
-          status: parsed.data.status,
-          resolvedAt: parsed.data.status === "RESOLVED" ? new Date() : undefined,
-          closedAt: parsed.data.status === "CLOSED" ? new Date() : undefined,
+          status: next,
+          resolvedAt: next === "RESOLVED" ? now : undefined,
+          closedAt: next === "CLOSED" ? now : undefined,
+          cancelledAt: next === "CANCELLED" ? now : undefined,
+          waitingReasonType: next === "WAITING_FOR_USER" ? parsed.data.waitingReasonType : undefined,
+          waitingReasonText: next === "WAITING_FOR_USER" ? parsed.data.waitingReasonText : undefined,
+          cancelReasonType: next === "CANCELLED" ? parsed.data.cancelReasonType : undefined,
+          cancelReasonText: next === "CANCELLED" ? parsed.data.cancelReasonText : undefined,
           ...(workMinutes != null ? { workMinutes } : {}),
+          ...slaPatch,
         },
       });
       if (changed.count !== 1) return null;
       await tx.ticketStatusHistory.create({
-        data: {
-          ticketId: id,
-          fromStatus: current.status,
-          toStatus: parsed.data.status,
-          actorId: session.userId,
-        },
+        data: { ticketId: id, fromStatus: current.status, toStatus: next, actorId: session.userId },
       });
+      if (parsed.data.comment) {
+        await tx.ticketMessage.create({
+          data: { ticketId: id, authorId: session.userId, body: parsed.data.comment, visibility: "PUBLIC" },
+        });
+      }
       await tx.auditLog.create({
         data: {
           actorId: session.userId,
-          action: "STATUS_CHANGED",
+          action: next === "IN_PROGRESS" && current.status === "RESOLVED" ? "TICKET_REOPENED" : "STATUS_CHANGED",
           entityType: "Ticket",
           entityId: id,
           metadata: {
-            from: current.status,
-            to: parsed.data.status,
-            workMinutes: workMinutes ?? null,
+            before: { status: current.status },
+            after: { status: next, workMinutes: workMinutes ?? null },
           },
         },
       });
+      const type =
+        next === "RESOLVED" ? "TICKET_RESOLVED" : next === "CLOSED" ? "TICKET_CLOSED" : next === "WAITING_FOR_USER" ? "WAITING_FOR_USER" : next === "IN_PROGRESS" && current.status === "RESOLVED" ? "TICKET_REOPENED" : "STATUS_CHANGED";
+      await tx.notification.create({ data: { userId: current.requesterId, ticketId: id, type } });
       return tx.ticket.findUnique({ where: { id } });
     });
-    if (!ticket) return NextResponse.json({ error: "Ticket changed concurrently" }, { status: 409 });
+    if (!ticket) return NextResponse.json({ error: "CONFLICT", message: "Заявку уже изменил другой специалист" }, { status: 409 });
+    if (session.userId !== current.requesterId) {
+      const link = await db.telegramConnection.findUnique({ where: { userId: current.requesterId } });
+      if (link) {
+        await sendTelegram(link.chatId, `HD-${current.number}: статус изменён\n${current.subject}`).catch(() => undefined);
+      }
+    }
     return NextResponse.json({ ticket });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNAUTHORIZED";
+    if (message === "FORBIDDEN") return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
 }

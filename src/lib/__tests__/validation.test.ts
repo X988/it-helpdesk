@@ -112,7 +112,8 @@ describe("labels", () => {
   });
 
   it("uses Russian priority and status", () => {
-    expect(priorityLabel.URGENT).toBe("Срочный");
+    expect(priorityLabel.URGENT).toBe("Критический");
+    expect(priorityLabel.NORMAL).toBe("Средний");
     expect(statusLabel.IN_PROGRESS).toBe("В работе");
   });
 });

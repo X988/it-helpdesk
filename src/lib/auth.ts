@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
+import { db } from "@/lib/db";
 import type { Role } from "@prisma/client";
 
 const COOKIE_NAME = "helpdesk_session";
@@ -19,6 +20,7 @@ function cookieSecure() {
 }
 
 export type Session = { userId: string; role: Role; email: string };
+export type Actor = Session & { departmentId: string | null };
 
 export async function createSessionToken(session: Session) {
   return new SignJWT(session)
@@ -57,10 +59,15 @@ export async function getSession(): Promise<Session | null> {
   }
 }
 
-export async function requireSession(): Promise<Session> {
+export async function requireSession(): Promise<Actor> {
   const session = await getSession();
   if (!session) throw new Error("UNAUTHORIZED");
-  return session;
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { isActive: true, role: true, email: true, departmentId: true },
+  });
+  if (!user?.isActive) throw new Error("UNAUTHORIZED");
+  return { userId: session.userId, role: user.role, email: user.email, departmentId: user.departmentId };
 }
 
 export async function requireRole(allowed: Role[]) {
