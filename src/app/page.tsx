@@ -33,15 +33,22 @@ export default async function Home() {
   } else if (isStaff) {
     cards.push(
       { href: "/tickets/new", title: "Новая заявка", text: "Создать заявку от своего имени." },
-      { href: "/dashboard", title: "Панель специалиста", text: "Очередь всех заявок, назначение и статусы." },
-      { href: "/dashboard", title: "IT очередь", text: "Рабочее место специалистов поддержки." },
+      { href: "/dashboard", title: "Панель специалиста", text: "Таблица заявок: счётчики, статусы и кто назначен." },
+      { href: "/queue", title: "Очередь", text: "Доска по колонкам: новые, в работе, ожидание, решено." },
     );
     if (session.role === "ADMIN") {
-      cards.push({
-        href: "/admin/users",
-        title: "Сотрудники и роли",
-        text: "Разделы, учётные записи, администратор, техподдержка и программист.",
-      });
+      cards.push(
+        {
+          href: "/admin/users",
+          title: "Сотрудники и роли",
+          text: "Разделы, учётные записи, администратор, техподдержка и программист.",
+        },
+        {
+          href: "/admin/organizations",
+          title: "Организации",
+          text: "Компании и их домены для входа.",
+        },
+      );
     }
   }
 
