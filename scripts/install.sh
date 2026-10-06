@@ -235,7 +235,7 @@ sudo -u "$APP_USER" bash -c "
   source '$ENV_FILE'
   set +a
   cd '$APP_DIR'
-  npm ci --no-audit --no-fund
+  npm ci --include=dev --no-audit --no-fund
   npx prisma migrate deploy
   npm run build
 "

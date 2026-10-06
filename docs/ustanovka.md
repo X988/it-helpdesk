@@ -222,7 +222,7 @@ openssl s_client -connect SERV1.energo.local:636 -showcerts </dev/null | head -3
 cd /opt/it-helpdesk/app
 sudo -u helpdesk bash -c '
   set -a; . /etc/it-helpdesk.env; set +a     # загрузить настройки в текущую сессию
-  npm ci --no-audit --no-fund                  # установить зависимости строго по package-lock.json
+  npm ci --include=dev --no-audit --no-fund      # NODE_ENV=production иначе выкинет tailwindcss и prisma
   npx prisma migrate deploy                    # создать/обновить таблицы в базе
   npm run build                                # собрать приложение
 '
@@ -405,7 +405,7 @@ sudo -u helpdesk git log --oneline HEAD..origin/main      # посмотреть
 sudo -u helpdesk git pull --ff-only
 sudo -u helpdesk bash -c '
   set -a; . /etc/it-helpdesk.env; set +a
-  npm ci --no-audit --no-fund
+  npm ci --include=dev --no-audit --no-fund
   npx prisma migrate deploy
   npm run build
 '
@@ -413,7 +413,7 @@ sudo systemctl restart it-helpdesk
 sleep 5; curl -s http://127.0.0.1:8090/api/health
 ```
 
-Откат, если что-то сломалось: `git log` → `sudo -u helpdesk git checkout <предыдущий_коммит>` → снова `npm ci && npm run build` → `systemctl restart`. Если новая версия уже изменила таблицы (миграция), восстановите базу из бэкапа, сделанного перед обновлением.
+Откат, если что-то сломалось: `git log` → `sudo -u helpdesk git checkout <предыдущий_коммит>` → снова `npm ci --include=dev && npm run build` → `systemctl restart`. Если новая версия уже изменила таблицы (миграция), восстановите базу из бэкапа, сделанного перед обновлением.
 
 ## 13. Резервное копирование базы
 
