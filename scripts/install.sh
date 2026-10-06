@@ -23,7 +23,7 @@ APP_HOME="${HELPDESK_HOME:-/opt/it-helpdesk}"
 ENV_FILE="${HELPDESK_ENV_FILE:-/etc/it-helpdesk.env}"
 APP_PORT="${HELPDESK_APP_PORT:-8090}"
 HTTPS_PORT="${HELPDESK_HTTPS_PORT:-}"
-ORG_NAME="${HELPDESK_ORG_NAME:-КП}"
+ORG_NAME="${HELPDESK_ORG_NAME:-}"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'Ошибка: %s\n' "$*" >&2; exit 1; }
@@ -119,6 +119,8 @@ else
   LDAP_UPN_SUFFIX=""
   LDAP_EMAIL_DOMAIN=""
 fi
+ask HELPDESK_ORG_NAME "Название компании, как его видят сотрудники" "${HELPDESK_ORG_NAME:-}"
+ORG_NAME="$HELPDESK_ORG_NAME"
 
 ENABLE_UFW="${HELPDESK_ENABLE_UFW:-}"
 if [[ -z "$ENABLE_UFW" ]]; then
