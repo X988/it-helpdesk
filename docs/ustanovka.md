@@ -4,6 +4,16 @@
 > Пример во всех командах: сервер **192.168.0.184**, домен Active Directory **energo** (полное имя `energo.local`), контроллер домена **SERV1.energo.local**.
 > Замените эти значения на свои, если сервер другой.
 
+Быстрый путь — один скрипт, он повторяет эту инструкцию (пакеты, PostgreSQL, `/etc/it-helpdesk.env`, миграции, категории, systemd, nginx, ночной бэкап). Тестовый seed не запускается.
+
+```bash
+curl -fsSL -o /tmp/install-helpdesk.sh \
+  https://raw.githubusercontent.com/X988/it-helpdesk/helpdesk-sla-rbac/scripts/install.sh
+sudo bash /tmp/install-helpdesk.sh
+```
+
+Без вопросов: `sudo HELPDESK_NONINTERACTIVE=1 HELPDESK_PUBLIC_HOST=192.168.0.184 LDAP_URL=ldaps://SERV1.energo.local:636 bash /tmp/install-helpdesk.sh`. Пустой LDAP: `LDAP_URL=-`. Пока изменения не влиты в `main`, скрипт ставит ветку `helpdesk-sla-rbac`.
+
 ## 0. Что получится в итоге
 
 ```

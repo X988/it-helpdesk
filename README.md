@@ -24,6 +24,8 @@ npm start
 # or: npm run dev
 ```
 
+Установка на чистый Linux-сервер: [docs/ustanovka.md](docs/ustanovka.md) или `sudo bash scripts/install.sh`.
+
 ### Login (domain credentials)
 
 UI expects NetBIOS-style logins with default domain **energo**:
