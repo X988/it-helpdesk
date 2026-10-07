@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { STAFF_ROLES, isStaffRole } from "@/lib/roles";
 import { assignSchema } from "@/lib/validation";
 import { canReadTicket } from "@/lib/ticket-access";
+import { enqueueUserNotification } from "@/lib/notifications";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -18,7 +19,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         isActive: true,
         role: { in: STAFF_ROLES },
       },
-      select: { id: true, departmentId: true, email: true },
+      select: { id: true, departmentId: true },
     });
     if (!assignee) return NextResponse.json({ error: "ASSIGNEE_NOT_FOUND" }, { status: 400 });
 
@@ -98,21 +99,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           },
         },
       });
-      await tx.notification.create({
-        data: { userId: assignee.id, ticketId: id, type: "TICKET_ASSIGNED" },
-      });
-      if (assignee.email) {
-        await tx.notificationOutbox.create({
-          data: {
-            userId: assignee.id,
-            ticketId: id,
-            channel: "EMAIL",
-            payload: {
-              to: assignee.email,
-              subject: `Назначена заявка HD-${current.number}`,
-              text: `${current.subject}\n${process.env.APP_URL || ""}/tickets/${id}`,
-            },
-          },
+      if (assignee.id !== session.userId) {
+        const link = `${(process.env.APP_URL || "").replace(/\/$/, "")}/tickets/${id}`;
+        await enqueueUserNotification(tx, {
+          userId: assignee.id,
+          type: "TICKET_ASSIGNED",
+          ticketId: id,
+          subject: `Назначена заявка HD-${current.number}`,
+          text: `HD-${current.number}: заявка назначена вам\n${current.subject}\n${link}`,
         });
       }
       return tx.ticket.findUnique({ where: { id } });
