@@ -22,21 +22,24 @@ export async function GET(request: Request) {
     if (url.searchParams.get("categoryId")) where.categoryId = url.searchParams.get("categoryId")!;
     if (url.searchParams.get("departmentId")) where.departmentId = url.searchParams.get("departmentId")!;
     if (url.searchParams.get("assigneeId")) where.assigneeId = url.searchParams.get("assigneeId")!;
-    if (url.searchParams.get("breached") === "1") where.breachedResolveAt = { not: null };
+    const filters: Prisma.TicketWhereInput[] = [];
+    if (url.searchParams.get("breached") === "1") {
+      filters.push({ OR: [{ breachedResponseAt: { not: null } }, { breachedResolveAt: { not: null } }] });
+    }
     if (url.searchParams.get("mine") === "1") where.assigneeId = session.userId;
     if (url.searchParams.get("unassigned") === "1") where.assigneeId = null;
     if (q) {
       const number = Number(q.replace(/^HD-/i, ""));
-      where.AND = [
-        {
-          OR: [
-            ...(Number.isInteger(number) ? [{ number }] : []),
-            { subject: { contains: q, mode: "insensitive" } },
-            { requester: { name: { contains: q, mode: "insensitive" } } },
-          ],
-        },
-      ];
+      filters.push({
+        OR: [
+          ...(Number.isInteger(number) ? [{ number }] : []),
+          { subject: { contains: q, mode: "insensitive" } },
+          { requester: { name: { contains: q, mode: "insensitive" } } },
+          { requester: { username: { contains: q, mode: "insensitive" } } },
+        ],
+      });
     }
+    if (filters.length) where.AND = filters;
     const [tickets, total] = await Promise.all([
       db.ticket.findMany({
         where,
