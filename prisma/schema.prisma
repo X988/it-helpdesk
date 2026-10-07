@@ -262,7 +262,7 @@ model TicketStatusHistory {
   ticketId   String        @db.Uuid
   fromStatus TicketStatus?
   toStatus   TicketStatus
-  actorId    String        @db.Uuid
+  actorId    String?       @db.Uuid
   createdAt  DateTime      @default(now())
   ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   @@index([ticketId, createdAt])
