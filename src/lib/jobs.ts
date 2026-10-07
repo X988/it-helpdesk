@@ -1,4 +1,3 @@
-import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { sendMail } from "@/lib/mailer";
 import { sendTelegram } from "@/lib/telegram";
@@ -38,7 +37,7 @@ export async function autoCloseResolved(now = new Date()) {
       });
       if (result.count !== 1) return false;
       await tx.ticketStatusHistory.create({
-        data: { ticketId: ticket.id, fromStatus: "RESOLVED", toStatus: "CLOSED", actorId: ticket.requesterId },
+        data: { ticketId: ticket.id, fromStatus: "RESOLVED", toStatus: "CLOSED", actorId: null },
       });
       await tx.auditLog.create({
         data: {
@@ -72,68 +71,97 @@ export async function markBreaches(now = new Date()) {
       id: true,
       number: true,
       subject: true,
-      assigneeId: true,
       firstResponseAt: true,
       slaResponseDue: true,
       slaResolveDue: true,
       breachedResponseAt: true,
       breachedResolveAt: true,
       status: true,
+      assignee: { select: { id: true, email: true } },
     },
     take: 300,
   });
-  let breaches = 0;
+
   const admins = await db.user.findMany({
     where: { role: "ADMIN", isActive: true },
     select: { id: true, email: true },
   });
+
+  let breaches = 0;
   for (const ticket of open) {
     const responseBreach =
       !ticket.firstResponseAt && !ticket.breachedResponseAt && isBreach(now, ticket.slaResponseDue);
     const resolveBreach =
-      ticket.status !== "WAITING_FOR_USER" && !ticket.breachedResolveAt && isBreach(now, ticket.slaResolveDue);
-    if (!responseBreach && !resolveBreach) continue;
-    const data: Prisma.TicketUpdateManyMutationInput = {};
-    if (responseBreach) data.breachedResponseAt = now;
-    if (resolveBreach) data.breachedResolveAt = now;
-    const where: Prisma.TicketWhereInput = { id: ticket.id };
-    if (responseBreach) where.breachedResponseAt = null;
-    if (resolveBreach) where.breachedResolveAt = null;
-    const updated = await db.ticket.updateMany({ where, data });
-    if (updated.count !== 1) continue;
-    breaches += 1;
-    const type = responseBreach ? "SLA_RESPONSE_BREACH" : "SLA_RESOLVE_BREACH";
+      ticket.status !== "WAITING_FOR_USER" &&
+      !ticket.breachedResolveAt &&
+      isBreach(now, ticket.slaResolveDue);
+
+    const events = [
+      ...(responseBreach
+        ? [{ type: "SLA_RESPONSE_BREACH" as const, label: "просрочена реакция" }]
+        : []),
+      ...(resolveBreach
+        ? [{ type: "SLA_RESOLVE_BREACH" as const, label: "просрочено решение" }]
+        : []),
+    ];
+    if (!events.length) continue;
+
     const recipients = new Map<string, string | null>();
-    if (ticket.assigneeId) {
-      const assignee = await db.user.findUnique({
-        where: { id: ticket.assigneeId },
-        select: { id: true, email: true },
-      });
-      if (assignee) recipients.set(assignee.id, assignee.email);
-    }
+    if (ticket.assignee) recipients.set(ticket.assignee.id, ticket.assignee.email);
     for (const admin of admins) recipients.set(admin.id, admin.email);
-    const text = `HD-${ticket.number}: ${responseBreach ? "просрочена реакция" : "просрочено решение"}\n${ticket.subject}\n${ticketLink(ticket.id)}`;
-    for (const [userId, email] of recipients) {
-      await db.notification.create({ data: { userId, ticketId: ticket.id, type } });
-      if (email) {
-        await db.notificationOutbox.create({
+
+    const changed = await db.$transaction(async (tx) => {
+      const updated = await tx.ticket.updateMany({
+        where: {
+          id: ticket.id,
+          ...(responseBreach ? { breachedResponseAt: null } : {}),
+          ...(resolveBreach ? { breachedResolveAt: null } : {}),
+        },
+        data: {
+          ...(responseBreach ? { breachedResponseAt: now } : {}),
+          ...(resolveBreach ? { breachedResolveAt: now } : {}),
+        },
+      });
+      if (updated.count !== 1) return false;
+
+      for (const event of events) {
+        await tx.auditLog.create({
           data: {
-            userId,
-            ticketId: ticket.id,
-            channel: "EMAIL",
-            payload: { to: email, subject: `SLA HD-${ticket.number}`, text },
+            action: event.type,
+            entityType: "Ticket",
+            entityId: ticket.id,
+            metadata: {
+              before: {},
+              after: { breachedAt: now, kind: event.type },
+            },
           },
         });
+
+        const text = `HD-${ticket.number}: ${event.label}\n${ticket.subject}\n${ticketLink(ticket.id)}`;
+        for (const [userId, email] of recipients) {
+          await tx.notification.create({
+            data: { userId, ticketId: ticket.id, type: event.type },
+          });
+          if (email) {
+            await tx.notificationOutbox.create({
+              data: {
+                userId,
+                ticketId: ticket.id,
+                channel: "EMAIL",
+                payload: {
+                  to: email,
+                  subject: `SLA HD-${ticket.number}`,
+                  text,
+                },
+              },
+            });
+          }
+        }
       }
-    }
-    await db.auditLog.create({
-      data: {
-        action: type,
-        entityType: "Ticket",
-        entityId: ticket.id,
-        metadata: { before: {}, after: { responseBreach, resolveBreach } },
-      },
+      return true;
     });
+
+    if (changed) breaches += events.length;
   }
   return breaches;
 }
