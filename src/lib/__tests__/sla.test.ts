@@ -121,7 +121,8 @@ describe("transitions and access", () => {
     expect(canReadTicket("USER", "u1", { requesterId: "u1", departmentId: "d1" }, null)).toBe(true);
     expect(canReadTicket("TECHNICIAN", "t1", { requesterId: "u1", departmentId: "d2" }, "d1")).toBe(false);
     expect(canReadTicket("TECHNICIAN", "t1", { requesterId: "u1", assigneeId: "t1", departmentId: "d2" }, "d1")).toBe(true);
-    expect(canReadTicket("TECHNICIAN", "t1", { requesterId: "u1" }, "d1")).toBe(true);
+    expect(canReadTicket("TECHNICIAN", "t1", { requesterId: "u1" }, "d1")).toBe(false);
+    expect(canReadTicket("TECHNICIAN", "t1", { requesterId: "u1", assigneeId: "t1" }, "d1")).toBe(true);
     expect(canReadTicket("ADMIN", "a1", { requesterId: "u1", departmentId: "d9" }, null)).toBe(true);
   });
 });
