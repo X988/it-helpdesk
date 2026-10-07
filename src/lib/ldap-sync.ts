@@ -72,7 +72,6 @@ export function resolveSyncBind(opts?: {
     throw new Error("LDAP_BIND_REQUIRED");
   }
   const upn = `${user}@${cfg.upnSuffix}`;
-  const netbios = `${cfg.domain}\\${user}`;
   // Prefer UPN; caller may retry — we try UPN first here
   return { bindDn: upn, bindPassword: pass, mode: "user" };
 }
