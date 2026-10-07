@@ -12,8 +12,10 @@ function asTicket(value: string | TicketAcl): TicketAcl {
 }
 
 /**
- * String form keeps the previous behaviour (any technician can read).
- * Object form scopes technicians to their department, assigned tickets, and legacy rows with no department.
+ * ADMIN can read every ticket.
+ * USER can read only own tickets.
+ * Queue staff can read assigned/requested tickets and tickets from their own department.
+ * Legacy rows without departmentId are intentionally NOT globally visible to staff.
  */
 export function canReadTicket(
   role: Role,
@@ -25,8 +27,7 @@ export function canReadTicket(
   if (role === "ADMIN") return true;
   if (role === "USER") return userId === ticket.requesterId;
   if (userId === ticket.requesterId || (ticket.assigneeId && userId === ticket.assigneeId)) return true;
-  if (!ticket.departmentId) return true;
-  if (!actorDepartmentId) return false;
+  if (!isStaffRole(role) || !actorDepartmentId || !ticket.departmentId) return false;
   return ticket.departmentId === actorDepartmentId;
 }
 
@@ -43,7 +44,6 @@ export function staffWhere(actor: { userId: string; role: Role; departmentId?: s
   if (actor.role === "USER") return { requesterId: actor.userId };
   return {
     OR: [
-      { departmentId: null },
       ...(actor.departmentId ? [{ departmentId: actor.departmentId }] : []),
       { assigneeId: actor.userId },
       { requesterId: actor.userId },
