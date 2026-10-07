@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   USER
   TECHNICIAN
+  PROGRAMMER
   ADMIN
 }
 enum TicketStatus {
@@ -44,7 +45,45 @@ enum NotificationType {
   TICKET_RESOLVED
   TICKET_REOPENED
   TICKET_CLOSED
+  SLA_RESPONSE_BREACH
+  SLA_RESOLVE_BREACH
 }
+
+enum DepartmentSource {
+  MANUAL
+  AD
+}
+
+enum TicketSource {
+  WEB
+  TELEGRAM
+  EMAIL
+}
+
+enum WaitingReasonType {
+  USER
+  EXTERNAL
+  VENDOR
+  OTHER
+}
+
+enum CancelReasonType {
+  DUPLICATE
+  INVALID_REQUEST
+  NOT_REQUIRED
+  OTHER
+}
+
+enum SlaCalendarMode {
+  BUSINESS_TIME
+  CALENDAR_TIME
+}
+
+enum KbStatus {
+  DRAFT
+  PUBLISHED
+}
+
 
 model Organization {
   id        String   @id @default(uuid()) @db.Uuid
@@ -68,25 +107,54 @@ model User {
   role           Role          @default(USER)
   organizationId String?       @db.Uuid
   department     String?
+  departmentId   String?       @db.Uuid
   isActive       Boolean       @default(true)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  departmentRef  Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   tickets        Ticket[]      @relation("TicketRequester")
   assigned       Ticket[]      @relation("TicketAssignee")
   messages       TicketMessage[]
   attachments    TicketAttachment[]
   telegram       TelegramConnection?
   notifications  Notification[]
+  kbArticles     KbArticle[]
+  cannedResponses CannedResponse[]
+  @@index([departmentId])
+}
+
+model Department {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  adOuDn      String?          @unique
+  source      DepartmentSource @default(MANUAL)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  categories  Category[]       @relation("CategoryOwner")
+  tickets     Ticket[]
+  @@index([name])
+  @@index([isActive])
 }
 
 model Category {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tickets   Ticket[]
+  id                String      @id @default(uuid()) @db.Uuid
+  name              String      @unique
+  isActive          Boolean     @default(true)
+  isHidden          Boolean     @default(false)
+  sortOrder         Int         @default(0)
+  ownerDepartmentId String?     @db.Uuid
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  ownerDepartment   Department? @relation("CategoryOwner", fields: [ownerDepartmentId], references: [id], onDelete: SetNull)
+  tickets           Ticket[]
+  articles          KbArticle[]
+  canned            CannedResponse[]
+  @@index([ownerDepartmentId])
+  @@index([isActive, sortOrder])
 }
 
 model Ticket {
@@ -102,25 +170,51 @@ model Ticket {
   assigneeId     String?       @db.Uuid
   categoryId     String        @db.Uuid
   organizationId String?       @db.Uuid
+  departmentId   String?       @db.Uuid
+  source         TicketSource  @default(WEB)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   resolvedAt     DateTime?
   closedAt       DateTime?
+  cancelledAt    DateTime?
+  firstResponseAt DateTime?
+  waitingSince   DateTime?
+  waitingReasonType WaitingReasonType?
+  waitingReasonText String?
+  cancelReasonType  CancelReasonType?
+  cancelReasonText  String?
+  slaResponseDue DateTime?
+  slaResolveDue  DateTime?
+  breachedResponseAt DateTime?
+  breachedResolveAt  DateTime?
+  slaResponseMinutes Int?
+  slaResolveMinutes  Int?
+  slaCalendarMode    SlaCalendarMode?
+  slaPolicyVersion   Int?
+  slaCalculatedAt    DateTime?
+  slaPausedMinutes   Int       @default(0)
+  slaRemainingResolveMinutes Int?
   requester      User          @relation("TicketRequester", fields: [requesterId], references: [id], onDelete: Restrict)
   assignee       User?         @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   category       Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  department     Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   messages       TicketMessage[]
   attachments    TicketAttachment[]
   assignments    TicketAssignment[]
   statusHistory  TicketStatusHistory[]
   notifications  Notification[]
   @@index([status, createdAt])
+  @@index([priority])
   @@index([requesterId, createdAt])
   @@index([assigneeId, status])
   @@index([categoryId])
   @@index([organizationId])
+  @@index([departmentId])
   @@index([direction])
+  @@index([updatedAt])
+  @@index([slaResponseDue])
+  @@index([slaResolveDue])
 }
 
 model TicketMessage {
@@ -132,6 +226,7 @@ model TicketMessage {
   createdAt  DateTime          @default(now())
   ticket     Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   author     User              @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  attachments TicketAttachment[]
   @@index([ticketId, createdAt])
 }
 
@@ -143,9 +238,11 @@ model TicketAttachment {
   objectKey    String   @unique
   mimeType     String
   size         Int
+  messageId    String?  @db.Uuid
   createdAt    DateTime @default(now())
   ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+  message      TicketMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
   @@index([ticketId])
 }
 
@@ -165,7 +262,7 @@ model TicketStatusHistory {
   ticketId   String        @db.Uuid
   fromStatus TicketStatus?
   toStatus   TicketStatus
-  actorId    String        @db.Uuid
+  actorId    String?       @db.Uuid
   createdAt  DateTime      @default(now())
   ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   @@index([ticketId, createdAt])
@@ -251,4 +348,61 @@ model AppSetting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+model SlaPolicy {
+  id              String          @id @default(uuid()) @db.Uuid
+  priority        Priority        @unique
+  responseMinutes Int
+  resolveMinutes  Int
+  calendarMode    SlaCalendarMode
+  version         Int             @default(1)
+  updatedAt       DateTime        @updatedAt
+}
+
+model KbArticle {
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String
+  slug        String    @unique
+  body        String
+  categoryId  String?   @db.Uuid
+  tags        String[]  @default([])
+  status      KbStatus  @default(DRAFT)
+  authorId    String    @db.Uuid
+  views       Int       @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  @@index([status, categoryId])
+}
+
+model CannedResponse {
+  id         String    @id @default(uuid()) @db.Uuid
+  title      String    @unique
+  body       String
+  categoryId String?   @db.Uuid
+  isActive   Boolean   @default(true)
+  createdBy  String    @db.Uuid
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  author     User      @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  @@index([isActive])
+}
+
+model NotificationOutbox {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String?   @db.Uuid
+  ticketId  String?   @db.Uuid
+  channel   String
+  payload   Json
+  status    String    @default("PENDING")
+  attempts  Int       @default(0)
+  lastError String?
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+  @@index([status, createdAt])
+}
+
 

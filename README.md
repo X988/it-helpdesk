@@ -24,6 +24,8 @@ npm start
 # or: npm run dev
 ```
 
+Установка на чистый Linux-сервер: [docs/ustanovka.md](docs/ustanovka.md) или `sudo bash scripts/install.sh`.
+
 ### Login (domain credentials)
 
 UI expects NetBIOS-style logins with default domain **energo**:
@@ -80,3 +82,11 @@ No production secrets belong in this repository. Runtime secrets must be provide
 - [docs/adminy.md](docs/adminy.md) — назначение администраторов и техников
 - [docs/rukovodstvo.md](docs/rukovodstvo.md) — руководство пользователя и IT-специалиста
 - [docs/IT-HelpDesk-instrukcii.docx](docs/IT-HelpDesk-instrukcii.docx) — все три раздела в одном Word-файле
+
+## SLA и очередь
+
+Рабочее время: пн–пт 09:00–18:00, Europe/Kyiv. Праздники пока не вычитаются — точка расширения `CalendarProvider` в `src/lib/sla.ts`. Приоритет «Критический» (`URGENT`) считается круглосуточно. Один рабочий день = 540 минут.
+
+Снимок SLA сохраняется на заявке. Ожидание пользователя ставит срок решения на паузу. Первая реакция — первый публичный ответ техника или администратора.
+
+`next start` раз в 5 минут закрывает решённые заявки старше 3 дней и один раз фиксирует просрочку. Внешний вызов: `POST /api/internal/jobs` с заголовком `x-cron-secret`. Письма идут через outbox и не откатывают заявку при сбое SMTP. Telegram сохранён; внутренние заметки пользователю не уходят.

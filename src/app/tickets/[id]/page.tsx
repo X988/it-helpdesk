@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { canReadTicket } from "@/lib/ticket-access";
+import { isStaffRole } from "@/lib/roles";
 import TicketActions from "./TicketActions";
 import LogoutButton from "@/components/LogoutButton";
 import SupportContacts from "@/components/SupportContacts";
@@ -16,11 +17,22 @@ import {
   roleLabel,
 } from "@/lib/labels";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const ticket = await db.ticket.findUnique({ where: { id }, select: { number: true, subject: true } });
+  return { title: ticket ? `HD-${ticket.number} · ${ticket.subject}` : "Заявка" };
+}
+
 export default async function TicketPage({ params }: { params: Promise<{ id: string }> }) {
   const s = await getSession();
   if (!s) redirect("/login");
+  const actor = await db.user.findUnique({
+    where: { id: s.userId },
+    select: { isActive: true, role: true, departmentId: true },
+  });
+  if (!actor?.isActive) redirect("/login");
   const { id } = await params;
-  const isStaff = s.role === "ADMIN" || s.role === "TECHNICIAN";
+  const isStaff = isStaffRole(actor.role);
   const t = await db.ticket.findUnique({
     where: { id },
     include: {
@@ -45,9 +57,21 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
       statusHistory: { orderBy: { createdAt: "asc" } },
     },
   });
-  if (!t || !canReadTicket(s.role, s.userId, t.requesterId)) notFound();
+  if (!t || !canReadTicket(actor.role, s.userId, t, actor.departmentId)) notFound();
   const manage = isStaff;
   const org = t.organization ?? t.requester.organization;
+
+  const cannedResponses = isStaff
+    ? await db.cannedResponse.findMany({
+        where: {
+          isActive: true,
+          OR: [{ categoryId: null }, { categoryId: t.categoryId }],
+        },
+        orderBy: { title: "asc" },
+        select: { id: true, title: true, body: true },
+        take: 40,
+      })
+    : [];
 
   const admins = !isStaff
     ? await db.user.findMany({
@@ -116,8 +140,10 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
               id={t.id}
               canManage={manage}
               currentStatus={t.status}
+              currentPriority={t.priority}
               currentAssigneeId={t.assignee?.id ?? null}
               currentWorkMinutes={t.workMinutes}
+              cannedResponses={cannedResponses}
               chatMode={!isStaff}
             />
           </article>
@@ -151,6 +177,14 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                 <b>Организация:</b> {formatOrganization(org?.name, org?.domain)}
               </p>
             )}
+            <p>
+              <b>SLA:</b>{" "}
+              <span className={t.breachedResponseAt || t.breachedResolveAt ? "late" : undefined}>
+                {t.breachedResponseAt || t.breachedResolveAt
+                  ? "Просрочен"
+                  : (t.firstResponseAt ? t.slaResolveDue : t.slaResponseDue)?.toLocaleString("ru-RU") ?? "—"}
+              </span>
+            </p>
             <p>
               <b>{isStaff ? "Специалист" : "Кто решает"}:</b>{" "}
               {t.assignee ? formatPerson(t.assignee.name, t.assignee.username) : "Ещё не назначен"}

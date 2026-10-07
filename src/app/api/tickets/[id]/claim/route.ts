@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { STAFF_ROLES } from "@/lib/roles";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireRole(["TECHNICIAN", "ADMIN"]);
+    const session = await requireRole(STAFF_ROLES);
     const { id } = await context.params;
+    const current = await db.ticket.findUnique({
+      where: { id },
+      select: { requesterId: true, assigneeId: true, departmentId: true },
+    });
+    if (!current) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    const { canReadTicket } = await import("@/lib/ticket-access");
+    if (!canReadTicket(session.role, session.userId, current, session.departmentId)) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
 
     const result = await db.$transaction(async (tx) => {
       const updated = await tx.ticket.updateMany({

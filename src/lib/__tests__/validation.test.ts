@@ -93,8 +93,8 @@ describe("parseDomainLogin", () => {
     });
   });
 
-  it("defaults domain to energo", () => {
-    expect(parseDomainLogin({ username: "user" }).domain).toBe("energo");
+  it("does not invent a domain when none is configured", () => {
+    expect(() => parseDomainLogin({ username: "user" })).toThrow("INVALID_LOGIN");
   });
 
   it("builds synthetic email", () => {
@@ -112,15 +112,22 @@ describe("labels", () => {
   });
 
   it("uses Russian priority and status", () => {
-    expect(priorityLabel.URGENT).toBe("Срочный");
+    expect(priorityLabel.URGENT).toBe("Критический");
+    expect(priorityLabel.NORMAL).toBe("Средний");
     expect(statusLabel.IN_PROGRESS).toBe("В работе");
   });
 });
 
 describe("getLoginDomains", () => {
-  it("returns at least energo by default", () => {
-    const domains = getLoginDomains();
-    expect(domains.length).toBeGreaterThan(0);
-    expect(domains).toContain("energo");
+  it("lists only configured domains", () => {
+    const previous = process.env.LDAP_DOMAINS;
+    const previousDomain = process.env.LDAP_DOMAIN;
+    process.env.LDAP_DOMAINS = "contoso,fabrikam";
+    delete process.env.LDAP_DOMAIN;
+    expect(getLoginDomains()).toEqual(["contoso", "fabrikam"]);
+    if (previous === undefined) delete process.env.LDAP_DOMAINS;
+    else process.env.LDAP_DOMAINS = previous;
+    if (previousDomain === undefined) delete process.env.LDAP_DOMAIN;
+    else process.env.LDAP_DOMAIN = previousDomain;
   });
 });

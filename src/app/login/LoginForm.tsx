@@ -7,7 +7,7 @@ export default function LoginForm({
   domains,
   defaultDomain,
 }: {
-  domains: string[];
+  domains: { value: string; label: string }[];
   defaultDomain: string;
 }) {
   const router = useRouter();
@@ -55,26 +55,34 @@ export default function LoginForm({
         <form onSubmit={submit} autoComplete="off">
           <label>
             Домен
-            <select
+            <input
               name="domain"
               value={domain}
-              onChange={(e) => setDomain(e.target.value)}
+              onChange={(e) => setDomain(e.target.value.trim().toLowerCase())}
               aria-label="Домен"
+              placeholder="короткое имя домена"
+              list="login-domains"
               required
-            >
-              {domains.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <datalist id="login-domains">
+              {domains.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
-            </select>
+            </datalist>
           </label>
           <label>
             Имя пользователя
             <div className="domainLogin">
-              <span className="domainPrefix" aria-hidden>
-                {domain}\
-              </span>
+              {domain ? (
+                <span className="domainPrefix" aria-hidden>
+                  {domain}\
+                </span>
+              ) : null}
               <input
                 name="username"
                 type="text"

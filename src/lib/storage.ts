@@ -12,8 +12,35 @@ const allowed = new Set([
   "image/webp",
   "application/pdf",
   "text/plain",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/zip",
+  "application/x-zip-compressed",
 ]);
+
+const mimeByExt: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  zip: "application/zip",
+};
+
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+export function canonicalMime(file: File) {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const mime = mimeByExt[ext];
+  if (!mime) throw new Error("INVALID_FILE_TYPE");
+  if (file.type && file.type !== "application/octet-stream" && file.type !== mime && !(mime === "application/zip" && allowed.has(file.type))) {
+    throw new Error("INVALID_FILE_TYPE");
+  }
+  return mime;
+}
 
 function env(name: string) {
   const v = process.env[name];
@@ -45,9 +72,11 @@ function localRoot() {
 }
 
 function localPath(key: string) {
-  // Prevent path traversal
-  const safe = key.replace(/\.\./g, "").replace(/^\/+/, "");
-  return path.join(localRoot(), safe);
+  const safe = key.replace(/\\/g, "/").replace(/\.\./g, "").replace(/^\/+/, "");
+  const root = path.resolve(localRoot());
+  const dest = path.resolve(root, safe);
+  if (dest !== root && !dest.startsWith(root + path.sep)) throw new Error("INVALID_PATH");
+  return dest;
 }
 
 function s3Client() {
@@ -64,7 +93,7 @@ function s3Client() {
 
 export function validateUpload(file: File) {
   if (file.size <= 0 || file.size > MAX_FILE_SIZE) throw new Error("INVALID_FILE_SIZE");
-  if (!allowed.has(file.type)) throw new Error("INVALID_FILE_TYPE");
+  return canonicalMime(file);
 }
 
 export function safeObjectKey(ticketId: string) {
@@ -72,7 +101,7 @@ export function safeObjectKey(ticketId: string) {
 }
 
 export async function putPrivateObject(key: string, file: File) {
-  validateUpload(file);
+  const mime = validateUpload(file);
   const body = Buffer.from(await file.arrayBuffer());
   if (storageBackend() === "local") {
     const dest = localPath(key);
@@ -85,7 +114,7 @@ export async function putPrivateObject(key: string, file: File) {
       Bucket: env("S3_BUCKET"),
       Key: key,
       Body: body,
-      ContentType: file.type,
+      ContentType: mime,
     }),
   );
 }

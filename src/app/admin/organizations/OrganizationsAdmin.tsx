@@ -81,7 +81,7 @@ export default function OrganizationsAdmin() {
           </label>
           <label>
             Домен
-            <input name="domain" required maxLength={64} placeholder="energo" defaultValue="energo" />
+            <input name="domain" required maxLength={64} placeholder="короткое имя домена" />
           </label>
           <button type="submit">Создать</button>
         </form>

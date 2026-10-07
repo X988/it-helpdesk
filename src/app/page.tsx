@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import LogoutButton from "@/components/LogoutButton";
 import { db } from "@/lib/db";
 import { formatPerson } from "@/lib/labels";
+import { isStaffRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function Home() {
         select: { name: true, username: true, role: true },
       })
     : null;
-  const isStaff = session && (session.role === "ADMIN" || session.role === "TECHNICIAN");
+  const isStaff = session && isStaffRole(session.role);
   const isUser = session?.role === "USER";
 
   const cards: { href: string; title: string; text: string }[] = [];
@@ -27,19 +28,27 @@ export default async function Home() {
     cards.push(
       { href: "/tickets/new", title: "Новая заявка", text: "Опишите проблему, выберите категорию и приложите скриншоты." },
       { href: "/dashboard", title: "Мои заявки", text: "Статус ваших заявок, специалист и чат с поддержкой." },
+      { href: "/kb", title: "База знаний", text: "Поиск готовых ответов до создания заявки." },
     );
   } else if (isStaff) {
     cards.push(
       { href: "/tickets/new", title: "Новая заявка", text: "Создать заявку от своего имени." },
-      { href: "/dashboard", title: "Панель специалиста", text: "Очередь всех заявок, назначение и статусы." },
-      { href: "/dashboard", title: "IT очередь", text: "Рабочее место специалистов поддержки." },
+      { href: "/dashboard", title: "Панель специалиста", text: "Таблица заявок: счётчики, статусы и кто назначен." },
+      { href: "/queue", title: "Очередь", text: "Доска по колонкам: новые, в работе, ожидание, решено." },
     );
     if (session.role === "ADMIN") {
-      cards.push({
-        href: "/admin/organizations",
-        title: "Организации",
-        text: "Добавление и правка организаций (например КП (energo)).",
-      });
+      cards.push(
+        {
+          href: "/admin/users",
+          title: "Сотрудники и роли",
+          text: "Разделы, учётные записи, администратор, техподдержка и программист.",
+        },
+        {
+          href: "/admin/organizations",
+          title: "Организации",
+          text: "Компании и их домены для входа.",
+        },
+      );
     }
   }
 

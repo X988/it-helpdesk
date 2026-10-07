@@ -72,7 +72,7 @@ async function resolveOrganizationId(opts: {
 
 async function authenticateLocal(parsed: ReturnType<typeof parseDomainLogin>, password: string): Promise<AuthUser> {
   const allowedDomain = DEFAULT_DOMAIN;
-  if (parsed.domain !== allowedDomain) {
+  if (allowedDomain && parsed.domain !== allowedDomain) {
     throw new Error("INVALID_CREDENTIALS");
   }
 

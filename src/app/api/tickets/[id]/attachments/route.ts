@@ -7,9 +7,9 @@ import { putPrivateObject, safeObjectKey } from "@/lib/storage";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession(); const { id } = await context.params;
-    const ticket = await db.ticket.findUnique({ where: { id }, select: { requesterId: true } });
-    if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!canReadTicket(session.role, session.userId, ticket.requesterId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ticket = await db.ticket.findUnique({ where: { id }, select: { requesterId: true, assigneeId: true, departmentId: true } });
+    if (!ticket) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    if (!canReadTicket(session.role, session.userId, ticket, session.departmentId)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     const form = await request.formData(); const files = form.getAll("files").filter((v): v is File => v instanceof File);
     if (!files.length || files.length > 5) return NextResponse.json({ error: "Upload 1-5 files" }, { status: 400 });
     const created = [];

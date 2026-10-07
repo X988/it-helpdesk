@@ -9,6 +9,7 @@ import Link from "next/link";
 
 type Category = { id: string; name: string };
 type Org = { id: string; name: string; domain: string };
+type Article = { id: string; title: string; slug: string };
 
 export default function NewTicketForm() {
   const router = useRouter();
@@ -17,6 +18,8 @@ export default function NewTicketForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [suggestions, setSuggestions] = useState<Article[]>([]);
 
   useEffect(() => {
     fetch("/api/categories")
@@ -28,6 +31,18 @@ export default function NewTicketForm() {
       .then((d) => setOrgs(d.organizations ?? []))
       .catch(() => null);
   }, []);
+
+  useEffect(() => {
+    const query = subject.trim();
+    if (query.length < 3) return;
+    const timer = window.setTimeout(() => {
+      fetch(`/api/kb?q=${encodeURIComponent(query)}`)
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((data) => setSuggestions((data.articles ?? []).slice(0, 5)))
+        .catch(() => setSuggestions([]));
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [subject]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -77,8 +92,20 @@ export default function NewTicketForm() {
         <form onSubmit={submit} className="ticketForm">
           <label>
             Тема
-            <input name="subject" required minLength={3} maxLength={160} />
+            <input name="subject" required minLength={5} maxLength={120} value={subject} onChange={(e) => {
+              const value = e.target.value;
+              setSubject(value);
+              if (value.trim().length < 3) setSuggestions([]);
+            }} />
           </label>
+          {suggestions.length > 0 && (
+            <div className="kbSuggestions">
+              <b>Возможно, ответ уже есть в базе знаний:</b>
+              {suggestions.map((article) => (
+                <Link key={article.id} href={`/kb/${article.slug}`} target="_blank">{article.title}</Link>
+              ))}
+            </div>
+          )}
           <label>
             Категория
             <select name="categoryId" required defaultValue="">
@@ -107,9 +134,9 @@ export default function NewTicketForm() {
             Приоритет
             <select name="priority" defaultValue="NORMAL">
               <option value="LOW">Низкий</option>
-              <option value="NORMAL">Обычный</option>
+              <option value="NORMAL">Средний</option>
               <option value="HIGH">Высокий</option>
-              <option value="URGENT">Срочный</option>
+              <option value="URGENT">Критический</option>
             </select>
           </label>
           {orgs.length > 0 && (

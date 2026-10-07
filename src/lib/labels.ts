@@ -2,9 +2,9 @@ import type { Priority, TicketStatus, TaskDirection, Role } from "@prisma/client
 
 export const priorityLabel: Record<Priority, string> = {
   LOW: "Низкий",
-  NORMAL: "Обычный",
+  NORMAL: "Средний",
   HIGH: "Высокий",
-  URGENT: "Срочный",
+  URGENT: "Критический",
 };
 
 export const statusLabel: Record<TicketStatus, string> = {
@@ -24,8 +24,9 @@ export const directionLabel: Record<TaskDirection, string> = {
 
 export const roleLabel: Record<Role, string> = {
   USER: "Пользователь",
-  TECHNICIAN: "Техник",
-  ADMIN: "Админ",
+  TECHNICIAN: "Техподдержка",
+  PROGRAMMER: "Программист",
+  ADMIN: "Администратор",
 };
 
 /** Display "Имя (логин)" — falls back to name or login alone. */

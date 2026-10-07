@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { db } from "@/lib/db";
 import { sendTelegram, telegram } from "@/lib/telegram";
+import { isStaffRole } from "@/lib/roles";
 
 type TelegramUpdate = {
   callback_query?: {
@@ -28,7 +29,7 @@ async function callback(update: TelegramUpdate) {
   if (!ticketId) return;
 
   if (action === "claim") {
-    if (!(["TECHNICIAN", "ADMIN"] as string[]).includes(connection.user.role)) {
+    if (!isStaffRole(connection.user.role)) {
       return telegram("answerCallbackQuery", { callback_query_id: q.id, text: "Недостаточно прав" });
     }
     const won = await db.$transaction(async (tx) => {

@@ -74,7 +74,10 @@ export default function AdDirectoryAdmin() {
   }, [loadSettings, loadDepartments]);
 
   useEffect(() => {
-    loadUsers(selectedOuDn, q).catch(() => setError("Не удалось загрузить пользователей"));
+    const timer = setTimeout(() => {
+      loadUsers(selectedOuDn, q).catch(() => setError("Не удалось загрузить пользователей"));
+    }, 0);
+    return () => clearTimeout(timer);
   }, [selectedOuDn, q, loadUsers]);
 
   async function sync(e: FormEvent) {

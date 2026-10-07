@@ -24,11 +24,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const { id } = await context.params;
     const attachment = await db.ticketAttachment.findUnique({
       where: { id },
-      include: { ticket: { select: { requesterId: true } } },
+      include: { ticket: { select: { requesterId: true, assigneeId: true, departmentId: true } } },
     });
-    if (!attachment) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!canReadTicket(session.role, session.userId, attachment.ticket.requesterId)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!attachment) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    if (!canReadTicket(session.role, session.userId, attachment.ticket, session.departmentId)) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
 
     const headers = new Headers();
