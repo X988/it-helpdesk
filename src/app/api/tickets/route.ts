@@ -135,24 +135,38 @@ export async function POST(request: Request) {
         where: departmentId
           ? { isActive: true, OR: [{ role: "ADMIN" }, { role: { in: ["TECHNICIAN", "PROGRAMMER"] }, departmentId }] }
           : { isActive: true, role: { in: STAFF_ROLES } },
-        select: { id: true, email: true },
+        select: { id: true, email: true, telegram: { select: { chatId: true } } },
       });
       if (staff.length) {
         await tx.notification.createMany({
           data: staff.map((user) => ({ userId: user.id, ticketId: created.id, type: "TICKET_CREATED" as const })),
         });
-        await tx.notificationOutbox.createMany({
-          data: staff.filter((user) => user.email).map((user) => ({
-            userId: user.id,
-            ticketId: created.id,
-            channel: "EMAIL",
-            payload: {
-              to: user.email,
-              subject: `Новая заявка HD-${created.number}`,
-              text: `${created.subject}\n${process.env.APP_URL || ""}/tickets/${created.id}`,
-            },
-          })),
-        });
+        const link = `${(process.env.APP_URL || "").replace(/\/$/, "")}/tickets/${created.id}`;
+        const text = `Новая заявка HD-${created.number}\n${created.subject}\n${link}`;
+        const deliveries: Prisma.NotificationOutboxCreateManyInput[] = [];
+        for (const user of staff) {
+          if (user.email) {
+            deliveries.push({
+              userId: user.id,
+              ticketId: created.id,
+              channel: "EMAIL",
+              payload: {
+                to: user.email,
+                subject: `Новая заявка HD-${created.number}`,
+                text,
+              },
+            });
+          }
+          if (user.telegram?.chatId) {
+            deliveries.push({
+              userId: user.id,
+              ticketId: created.id,
+              channel: "TELEGRAM",
+              payload: { chatId: user.telegram.chatId, text },
+            });
+          }
+        }
+        if (deliveries.length) await tx.notificationOutbox.createMany({ data: deliveries });
       }
       return created;
     });
