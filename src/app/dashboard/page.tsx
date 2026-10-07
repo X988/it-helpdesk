@@ -51,11 +51,11 @@ export default async function Dashboard() {
         </div>
         <div className="actionRow" style={{ marginBottom: 0 }}>
           <Link className="button secondary" href="/kb">База знаний</Link>
-          {isStaff && <Link className="button secondary" href="/queue">Очередь</Link>}
+          {isStaff && <Link className="button secondary" href="/tickets">Заявки</Link>}\n          {isStaff && <Link className="button secondary" href="/queue">Очередь</Link>}
           {s.role === "ADMIN" && (
             <>
               <Link className="button secondary" href="/admin/users">Сотрудники и роли</Link>
-              <Link className="button secondary" href="/admin/sla">SLA</Link>
+              <Link className="button secondary" href="/admin/departments">Отделы</Link>\n              <Link className="button secondary" href="/admin/categories">Категории</Link>\n              <Link className="button secondary" href="/admin/sla">SLA</Link>\n              <Link className="button secondary" href="/admin/canned">Шаблоны</Link>\n              <Link className="button secondary" href="/admin/audit">Аудит</Link>
               <Link className="button secondary" href="/admin/ad">
                 Active Directory
               </Link>
