@@ -61,6 +61,18 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
   const manage = isStaff;
   const org = t.organization ?? t.requester.organization;
 
+  const cannedResponses = isStaff
+    ? await db.cannedResponse.findMany({
+        where: {
+          isActive: true,
+          OR: [{ categoryId: null }, { categoryId: t.categoryId }],
+        },
+        orderBy: { title: "asc" },
+        select: { id: true, title: true, body: true },
+        take: 40,
+      })
+    : [];
+
   const admins = !isStaff
     ? await db.user.findMany({
         where: { isActive: true, role: "ADMIN" },
@@ -128,8 +140,10 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
               id={t.id}
               canManage={manage}
               currentStatus={t.status}
+              currentPriority={t.priority}
               currentAssigneeId={t.assignee?.id ?? null}
               currentWorkMinutes={t.workMinutes}
+              cannedResponses={cannedResponses}
               chatMode={!isStaff}
             />
           </article>
@@ -163,6 +177,14 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                 <b>Организация:</b> {formatOrganization(org?.name, org?.domain)}
               </p>
             )}
+            <p>
+              <b>SLA:</b>{" "}
+              <span className={t.breachedResponseAt || t.breachedResolveAt ? "late" : undefined}>
+                {t.breachedResponseAt || t.breachedResolveAt
+                  ? "Просрочен"
+                  : (t.firstResponseAt ? t.slaResolveDue : t.slaResponseDue)?.toLocaleString("ru-RU") ?? "—"}
+              </span>
+            </p>
             <p>
               <b>{isStaff ? "Специалист" : "Кто решает"}:</b>{" "}
               {t.assignee ? formatPerson(t.assignee.name, t.assignee.username) : "Ещё не назначен"}
