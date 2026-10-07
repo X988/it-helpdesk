@@ -34,10 +34,7 @@ export default function NewTicketForm() {
 
   useEffect(() => {
     const query = subject.trim();
-    if (query.length < 3) {
-      setSuggestions([]);
-      return;
-    }
+    if (query.length < 3) return;
     const timer = window.setTimeout(() => {
       fetch(`/api/kb?q=${encodeURIComponent(query)}`)
         .then((r) => (r.ok ? r.json() : Promise.reject()))
@@ -95,7 +92,11 @@ export default function NewTicketForm() {
         <form onSubmit={submit} className="ticketForm">
           <label>
             Тема
-            <input name="subject" required minLength={5} maxLength={120} value={subject} onChange={(e) => setSubject(e.target.value)} />
+            <input name="subject" required minLength={5} maxLength={120} value={subject} onChange={(e) => {
+              const value = e.target.value;
+              setSubject(value);
+              if (value.trim().length < 3) setSuggestions([]);
+            }} />
           </label>
           {suggestions.length > 0 && (
             <div className="kbSuggestions">
