@@ -6,20 +6,25 @@ import FilePasteZone from "@/components/FilePasteZone";
 import { formatPerson } from "@/lib/labels";
 
 type Staff = { id: string; name: string; username: string | null; role: string };
+type Canned = { id: string; title: string; body: string };
 
 export default function TicketActions({
   id,
   canManage,
   currentStatus,
+  currentPriority,
   currentAssigneeId,
   currentWorkMinutes,
+  cannedResponses = [],
   chatMode = false,
 }: {
   id: string;
   canManage: boolean;
   currentStatus: string;
+  currentPriority: string;
   currentAssigneeId: string | null;
   currentWorkMinutes: number | null;
+  cannedResponses?: Canned[];
   chatMode?: boolean;
 }) {
   const router = useRouter();
@@ -34,6 +39,9 @@ export default function TicketActions({
   );
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [messageBody, setMessageBody] = useState("");
+  const [reopenComment, setReopenComment] = useState("");
+  const [priority, setPriority] = useState(currentPriority);
 
   useEffect(() => {
     if (!canManage) return;
@@ -61,7 +69,7 @@ export default function TicketActions({
 
   async function status(value: string, extra: Record<string, string> = {}) {
     setError("");
-    const needsTime = value === "RESOLVED" || value === "CLOSED";
+    const needsTime = canManage && (value === "RESOLVED" || value === "CLOSED");
     const minutes = totalMinutes() ?? currentWorkMinutes;
     if (needsTime && (minutes == null || minutes < 1)) {
       setError("Укажите затраченное время (часы и/или минуты) перед закрытием");
@@ -75,6 +83,20 @@ export default function TicketActions({
     if (!r.ok) {
       const data = await r.json().catch(() => ({}));
       setError(data.message || "Переход статуса недоступен");
+    }
+    router.refresh();
+  }
+
+  async function changePriority() {
+    setError("");
+    const r = await fetch(`/api/tickets/${id}/priority`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ priority }),
+    });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      setError(data.message || "Не удалось изменить приоритет");
     }
     router.refresh();
   }
@@ -104,7 +126,7 @@ export default function TicketActions({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        body: f.get("body"),
+        body: messageBody,
         visibility: f.get("visibility") ?? "PUBLIC",
       }),
     });
@@ -120,6 +142,7 @@ export default function TicketActions({
       if (!u.ok) setError("Сообщение отправлено, но файлы загрузить не удалось");
     }
     form.reset();
+    setMessageBody("");
     setFiles([]);
     setBusy(false);
     router.refresh();
@@ -146,6 +169,18 @@ export default function TicketActions({
             )}
           </div>
           <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+            <label>
+              Приоритет
+              <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+                <option value="LOW">Низкий</option>
+                <option value="NORMAL">Средний</option>
+                <option value="HIGH">Высокий</option>
+                <option value="URGENT">Критический</option>
+              </select>
+            </label>
+            <div className="actionRow" style={{ marginTop: 10 }}>
+              <button type="button" className="secondary" onClick={changePriority}>Изменить приоритет</button>
+            </div>
             <label>
               Назначить специалиста
               <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
@@ -192,13 +227,63 @@ export default function TicketActions({
           </div>
         </>
       )}
+      {!canManage && chatMode && currentStatus === "RESOLVED" && (
+        <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+          <h3 style={{ marginTop: 0 }}>Решение готово</h3>
+          <div className="actionRow">
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Подтвердить решение и закрыть заявку?")) status("CLOSED");
+              }}
+            >
+              Подтвердить и закрыть
+            </button>
+          </div>
+          <label>
+            Если проблема осталась — опишите причину
+            <textarea value={reopenComment} onChange={(e) => setReopenComment(e.target.value)} rows={3} />
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              const comment = reopenComment.trim();
+              if (!comment) {
+                setError("Для возврата в работу нужен комментарий");
+                return;
+              }
+              status("IN_PROGRESS", { comment });
+            }}
+          >
+            Вернуть в работу
+          </button>
+        </div>
+      )}
       <form onSubmit={message} className="ticketForm chatComposer">
+        {canManage && cannedResponses.length > 0 && (
+          <label>
+            Шаблон ответа
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const canned = cannedResponses.find((item) => item.id === e.target.value);
+                if (canned) setMessageBody(canned.body);
+              }}
+            >
+              <option value="">Не выбран</option>
+              {cannedResponses.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>
+          </label>
+        )}
         <label>
           {chatMode ? "Сообщение в чат" : "Сообщение"}
           <textarea
             name="body"
             required
             rows={4}
+            value={messageBody}
+            onChange={(e) => setMessageBody(e.target.value)}
             placeholder={chatMode ? "Напишите вопрос или уточнение специалисту…" : undefined}
           />
         </label>
