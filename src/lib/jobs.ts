@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sendMail } from "@/lib/mailer";
 import { sendTelegram } from "@/lib/telegram";
 import { isBreach } from "@/lib/sla";
+import { enqueueUserNotification } from "@/lib/notifications";
 
 const AUTO_CLOSE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -48,8 +49,12 @@ export async function autoCloseResolved(now = new Date()) {
           metadata: { before: { status: "RESOLVED" }, after: { status: "CLOSED" } },
         },
       });
-      await tx.notification.create({
-        data: { userId: ticket.requesterId, ticketId: ticket.id, type: "TICKET_CLOSED" },
+      await enqueueUserNotification(tx, {
+        userId: ticket.requesterId,
+        type: "TICKET_CLOSED",
+        ticketId: ticket.id,
+        subject: `HD-${ticket.number}: заявка закрыта автоматически`,
+        text: `HD-${ticket.number}: заявка закрыта автоматически\n${ticket.subject}\n${ticketLink(ticket.id)}`,
       });
       return true;
     });
@@ -77,14 +82,14 @@ export async function markBreaches(now = new Date()) {
       breachedResponseAt: true,
       breachedResolveAt: true,
       status: true,
-      assignee: { select: { id: true, email: true } },
+      assignee: { select: { id: true } },
     },
     take: 300,
   });
 
   const admins = await db.user.findMany({
     where: { role: "ADMIN", isActive: true },
-    select: { id: true, email: true },
+    select: { id: true },
   });
 
   let breaches = 0;
@@ -106,9 +111,9 @@ export async function markBreaches(now = new Date()) {
     ];
     if (!events.length) continue;
 
-    const recipients = new Map<string, string | null>();
-    if (ticket.assignee) recipients.set(ticket.assignee.id, ticket.assignee.email);
-    for (const admin of admins) recipients.set(admin.id, admin.email);
+    const recipients = new Set<string>();
+    if (ticket.assignee) recipients.add(ticket.assignee.id);
+    for (const admin of admins) recipients.add(admin.id);
 
     const changed = await db.$transaction(async (tx) => {
       const updated = await tx.ticket.updateMany({
@@ -138,24 +143,14 @@ export async function markBreaches(now = new Date()) {
         });
 
         const text = `HD-${ticket.number}: ${event.label}\n${ticket.subject}\n${ticketLink(ticket.id)}`;
-        for (const [userId, email] of recipients) {
-          await tx.notification.create({
-            data: { userId, ticketId: ticket.id, type: event.type },
+        for (const userId of recipients) {
+          await enqueueUserNotification(tx, {
+            userId,
+            type: event.type,
+            ticketId: ticket.id,
+            subject: `SLA HD-${ticket.number}`,
+            text,
           });
-          if (email) {
-            await tx.notificationOutbox.create({
-              data: {
-                userId,
-                ticketId: ticket.id,
-                channel: "EMAIL",
-                payload: {
-                  to: email,
-                  subject: `SLA HD-${ticket.number}`,
-                  text,
-                },
-              },
-            });
-          }
         }
       }
       return true;
@@ -174,13 +169,19 @@ export async function drainOutbox() {
   });
   let sent = 0;
   for (const row of rows) {
-    const payload = row.payload as { to?: string; subject?: string; text?: string; chatId?: string };
+    const payload = row.payload as {
+      to?: string;
+      subject?: string;
+      text?: string;
+      chatId?: string;
+      keyboard?: unknown;
+    };
     try {
       if (row.channel === "EMAIL" && payload.to && payload.subject && payload.text) {
         const result = await sendMail({ to: payload.to, subject: payload.subject, text: payload.text });
         if (!result.delivered && result.mode === "smtp") throw new Error("SMTP_FAILED");
       } else if (row.channel === "TELEGRAM" && payload.chatId && payload.text) {
-        await sendTelegram(payload.chatId, payload.text);
+        await sendTelegram(payload.chatId, payload.text, payload.keyboard);
       }
       await db.notificationOutbox.update({
         where: { id: row.id },
