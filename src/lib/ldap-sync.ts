@@ -71,9 +71,8 @@ export function resolveSyncBind(opts?: {
   if (!user || !pass) {
     throw new Error("LDAP_BIND_REQUIRED");
   }
+  // UPN is the primary bind name. bindClient also retries DOMAIN\user.
   const upn = `${user}@${cfg.upnSuffix}`;
-  const netbios = `${cfg.domain}\\${user}`;
-  // Prefer UPN; caller may retry — we try UPN first here
   return { bindDn: upn, bindPassword: pass, mode: "user" };
 }
 
