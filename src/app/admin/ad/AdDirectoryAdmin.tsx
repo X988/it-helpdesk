@@ -23,6 +23,16 @@ type AdUser = {
   isDisabled: boolean;
 };
 
+async function fetchUsers(ouDn: string, query: string): Promise<AdUser[]> {
+  const params = new URLSearchParams();
+  if (ouDn) params.set("ouDn", ouDn);
+  if (query) params.set("q", query);
+  const r = await fetch(`/api/admin/ad/users?${params}`);
+  if (!r.ok) throw new Error("users");
+  const d = await r.json();
+  return d.users ?? [];
+}
+
 export default function AdDirectoryAdmin() {
   const [departments, setDepartments] = useState<Dept[]>([]);
   const [users, setUsers] = useState<AdUser[]>([]);
@@ -53,16 +63,6 @@ export default function AdDirectoryAdmin() {
     setLastSyncAt(d.lastSyncAt ?? null);
   }, []);
 
-  const loadUsers = useCallback(async (ouDn: string, query: string) => {
-    const params = new URLSearchParams();
-    if (ouDn) params.set("ouDn", ouDn);
-    if (query) params.set("q", query);
-    const r = await fetch(`/api/admin/ad/users?${params}`);
-    if (!r.ok) throw new Error("users");
-    const d = await r.json();
-    setUsers(d.users ?? []);
-  }, []);
-
   useEffect(() => {
     (async () => {
       try {
@@ -74,8 +74,19 @@ export default function AdDirectoryAdmin() {
   }, [loadSettings, loadDepartments]);
 
   useEffect(() => {
-    loadUsers(selectedOuDn, q).catch(() => setError("Не удалось загрузить пользователей"));
-  }, [selectedOuDn, q, loadUsers]);
+    // Ignore stale responses when the filter changes while a request is in flight
+    let cancelled = false;
+    fetchUsers(selectedOuDn, q)
+      .then((list) => {
+        if (!cancelled) setUsers(list);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Не удалось загрузить пользователей");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOuDn, q]);
 
   async function sync(e: FormEvent) {
     e.preventDefault();
@@ -97,7 +108,8 @@ export default function AdDirectoryAdmin() {
       setInfo(
         `Синхронизация завершена: отделов ${d.departments}, пользователей ${d.users} (режим: ${d.bindMode === "service" ? "service account" : "ваш доменный вход"}).`,
       );
-      await Promise.all([loadDepartments(), loadSettings(), loadUsers(selectedOuDn, q)]);
+      const [, , list] = await Promise.all([loadDepartments(), loadSettings(), fetchUsers(selectedOuDn, q)]);
+      setUsers(list);
     } catch {
       setError("Ошибка сети при синхронизации");
     } finally {
