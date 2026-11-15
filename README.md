@@ -2,6 +2,30 @@
 
 Internal IT Service Desk for ticket intake, assignment, collaboration, attachments, audit history, and Telegram notifications.
 
+## Features
+
+- Ticket intake with categories, priority, direction, attachments (paste screenshots with Ctrl+V)
+- Queue with search (`HD-15`, subject, text, requester) and filters (status, priority, category, direction, assignee), pagination
+- Claim / assign, status workflow with history, required work time on resolve/close
+- Requester confirms or reopens a resolved ticket (web or Telegram); replying to a "waiting for user" ticket returns it to work
+- Public chat and internal notes
+- In-app notifications (unread badge) and Telegram notifications with inline actions; self-service Telegram linking in Profile
+- Reports for staff: totals, average resolution time, breakdown by status / priority / assignee / direction / category, CSV export
+- Admin UI: users (roles, block/unblock, organization), categories, organizations, Active Directory sync
+- Role changes and blocking take effect immediately (session is re-validated against the database)
+- Audit log of all changes
+
+## Pages
+
+| Path | Who | Purpose |
+|---|---|---|
+| `/dashboard` | all | Tickets (own for USER, all for staff) with filters |
+| `/tickets/new`, `/tickets/[id]` | all | Create / view ticket |
+| `/notifications` | all | Notification list |
+| `/profile` | all | Account info, Telegram link |
+| `/reports` | TECHNICIAN, ADMIN | Statistics and CSV export |
+| `/admin/users`, `/admin/categories`, `/admin/organizations`, `/admin/ad` | ADMIN | Administration |
+
 ## Stack
 
 - Next.js 16 + TypeScript
@@ -77,6 +101,6 @@ No production secrets belong in this repository. Runtime secrets must be provide
 ## Документация (RU)
 
 - [docs/ustanovka.md](docs/ustanovka.md) — установка и настройка на Linux-сервере (Node 22, PostgreSQL, AD/LDAP, nginx HTTPS, systemd, firewall, обновление, бэкап)
-- [docs/adminy.md](docs/adminy.md) — назначение администраторов и техников
-- [docs/rukovodstvo.md](docs/rukovodstvo.md) — руководство пользователя и IT-специалиста
-- [docs/IT-HelpDesk-instrukcii.docx](docs/IT-HelpDesk-instrukcii.docx) — все три раздела в одном Word-файле
+- [docs/adminy.md](docs/adminy.md) — назначение администраторов и техников (веб-интерфейс и SQL)
+- [docs/rukovodstvo.md](docs/rukovodstvo.md) — руководство пользователя и IT-специалиста (заявки, уведомления, Telegram, отчёты)
+- [docs/IT-HelpDesk-instrukcii.docx](docs/IT-HelpDesk-instrukcii.docx) — все три раздела в одном Word-файле (версия до добавления уведомлений, отчётов и админ-разделов; актуальны .md)
