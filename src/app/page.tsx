@@ -27,19 +27,25 @@ export default async function Home() {
     cards.push(
       { href: "/tickets/new", title: "Новая заявка", text: "Опишите проблему, выберите категорию и приложите скриншоты." },
       { href: "/dashboard", title: "Мои заявки", text: "Статус ваших заявок, специалист и чат с поддержкой." },
+      { href: "/notifications", title: "Уведомления", text: "Ответы специалистов и изменения статусов ваших заявок." },
+      { href: "/profile", title: "Профиль и Telegram", text: "Подключите Telegram, чтобы получать уведомления в мессенджер." },
     );
   } else if (isStaff) {
     cards.push(
       { href: "/tickets/new", title: "Новая заявка", text: "Создать заявку от своего имени." },
       { href: "/dashboard", title: "Панель специалиста", text: "Очередь всех заявок, назначение и статусы." },
-      { href: "/dashboard", title: "IT очередь", text: "Рабочее место специалистов поддержки." },
+      { href: "/dashboard?status=open&assignee=me", title: "Мои открытые", text: "Заявки, назначенные на вас и ещё не решённые." },
+      { href: "/reports", title: "Отчёты", text: "Статистика по заявкам, специалистам, направлениям и затраченному времени. Экспорт в CSV." },
+      { href: "/notifications", title: "Уведомления", text: "Новые заявки, сообщения и изменения статусов." },
+      { href: "/profile", title: "Профиль и Telegram", text: "Подключите Telegram-бота: уведомления и «Взять в работу» из чата." },
     );
     if (session.role === "ADMIN") {
-      cards.push({
-        href: "/admin/organizations",
-        title: "Организации",
-        text: "Добавление и правка организаций (например КП (energo)).",
-      });
+      cards.push(
+        { href: "/admin/users", title: "Пользователи", text: "Роли (пользователь, техник, админ) и блокировка учётных записей." },
+        { href: "/admin/categories", title: "Категории", text: "Справочник категорий заявок: добавление, переименование, скрытие." },
+        { href: "/admin/organizations", title: "Организации", text: "Добавление и правка организаций (например КП (energo))." },
+        { href: "/admin/ad", title: "Active Directory", text: "Синхронизация OU и пользователей домена, OU администраторов." },
+      );
     }
   }
 
