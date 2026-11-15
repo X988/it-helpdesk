@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import LogoutButton from "@/components/LogoutButton";
+import UserNav from "@/components/UserNav";
+import AdminNav from "@/components/AdminNav";
 import AdDirectoryAdmin from "./AdDirectoryAdmin";
 
 export default async function AdminAdPage() {
@@ -18,8 +19,9 @@ export default async function AdminAdPage() {
           <h1>Active Directory</h1>
           <p className="muted">Отделы (OU), пользователи и назначение OU админов Help Desk</p>
         </div>
-        <LogoutButton />
+        <UserNav userId={s.userId} role={s.role} />
       </header>
+      <AdminNav current="/admin/ad" />
       <AdDirectoryAdmin />
     </main>
   );

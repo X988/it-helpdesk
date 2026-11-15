@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import LogoutButton from "@/components/LogoutButton";
+import UserNav from "@/components/UserNav";
+import AdminNav from "@/components/AdminNav";
 import OrganizationsAdmin from "./OrganizationsAdmin";
 
 export default async function AdminOrganizationsPage() {
@@ -18,8 +19,9 @@ export default async function AdminOrganizationsPage() {
           <h1>Организации</h1>
           <p className="muted">Формат отображения: название (домен), например КП (energo)</p>
         </div>
-        <LogoutButton />
+        <UserNav userId={s.userId} role={s.role} />
       </header>
+      <AdminNav current="/admin/organizations" />
       <OrganizationsAdmin />
     </main>
   );
