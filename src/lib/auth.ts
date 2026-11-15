@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import type { Role } from "@prisma/client";
+import { db } from "@/lib/db";
 
 const COOKIE_NAME = "helpdesk_session";
 const encoder = new TextEncoder();
@@ -51,7 +52,14 @@ export async function getSession(): Promise<Session | null> {
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
     if (!payload.userId || !payload.role || !payload.email) return null;
-    return { userId: String(payload.userId), role: payload.role as Role, email: String(payload.email) };
+    // Re-check the account on every request so that blocking a user or changing
+    // their role in the admin UI takes effect immediately, not after the JWT expires.
+    const user = await db.user.findUnique({
+      where: { id: String(payload.userId) },
+      select: { id: true, role: true, email: true, isActive: true },
+    });
+    if (!user || !user.isActive) return null;
+    return { userId: user.id, role: user.role, email: user.email };
   } catch {
     return null;
   }

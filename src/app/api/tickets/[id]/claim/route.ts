@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { onTicketAssigned } from "@/lib/notifications";
 import { requireRole } from "@/lib/auth";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
@@ -21,6 +22,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     });
 
     if (!result) return NextResponse.json({ error: "Ticket is already assigned or unavailable" }, { status: 409 });
+    onTicketAssigned(id, session.userId);
     return NextResponse.json({ ticket: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNAUTHORIZED";

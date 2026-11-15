@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { onStatusChanged } from "@/lib/notifications";
 import { requireSession } from "@/lib/auth";
 import { canManageTicket } from "@/lib/ticket-access";
 import { statusChangeSchema } from "@/lib/validation";
@@ -82,6 +83,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return tx.ticket.findUnique({ where: { id } });
     });
     if (!ticket) return NextResponse.json({ error: "Ticket changed concurrently" }, { status: 409 });
+    onStatusChanged(id, current.status, parsed.data.status, session.userId);
     return NextResponse.json({ ticket });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

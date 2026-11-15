@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { canReadTicket } from "@/lib/ticket-access";
 import TicketActions from "./TicketActions";
-import LogoutButton from "@/components/LogoutButton";
+import UserNav from "@/components/UserNav";
 import SupportContacts from "@/components/SupportContacts";
 import {
   formatOrganization,
@@ -46,6 +46,11 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
     },
   });
   if (!t || !canReadTicket(s.role, s.userId, t.requesterId)) notFound();
+  // Opening the ticket counts as reading its notifications.
+  await db.notification.updateMany({
+    where: { userId: s.userId, ticketId: t.id, readAt: null },
+    data: { readAt: new Date() },
+  });
   const manage = isStaff;
   const org = t.organization ?? t.requester.organization;
 
@@ -63,7 +68,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
         <Link href="/dashboard" className="muted">
           ← {isStaff ? "К панели" : "К моим заявкам"}
         </Link>
-        <LogoutButton />
+        <UserNav userId={s.userId} role={s.role} />
       </div>
       <header className="ticketHeader">
         <div>
@@ -119,6 +124,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
               currentAssigneeId={t.assignee?.id ?? null}
               currentWorkMinutes={t.workMinutes}
               chatMode={!isStaff}
+              isRequester={t.requesterId === s.userId}
             />
           </article>
         </section>

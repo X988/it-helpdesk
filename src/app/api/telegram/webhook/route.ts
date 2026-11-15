@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { db } from "@/lib/db";
 import { sendTelegram, telegram } from "@/lib/telegram";
+import { onTicketAssigned } from "@/lib/notifications";
+import { applyRequesterDecision } from "@/lib/ticket-workflow";
 
 type TelegramUpdate = {
   callback_query?: {
@@ -41,41 +43,23 @@ async function callback(update: TelegramUpdate) {
       await tx.ticketStatusHistory.create({
         data: { ticketId, fromStatus: "NEW", toStatus: "IN_PROGRESS", actorId: connection.userId },
       });
+      await tx.auditLog.create({
+        data: { actorId: connection.userId, action: "TICKET_CLAIMED", entityType: "Ticket", entityId: ticketId },
+      });
       return true;
     });
+    if (won) onTicketAssigned(ticketId, connection.userId);
     return telegram("answerCallbackQuery", {
       callback_query_id: q.id,
       text: won ? "Заявка назначена вам" : "Заявку уже взял другой специалист",
     });
   }
 
-  const ticket = await db.ticket.findUnique({ where: { id: ticketId } });
-  if (!ticket || ticket.requesterId !== connection.userId || ticket.status !== "RESOLVED") {
-    return telegram("answerCallbackQuery", { callback_query_id: q.id, text: "Действие уже недоступно" });
-  }
-  const target = action === "fixed" ? "CLOSED" : action === "reopen" ? "IN_PROGRESS" : null;
-  if (!target) return;
-  await db.$transaction(async (tx) => {
-    const changed = await tx.ticket.updateMany({
-      where: { id: ticketId, requesterId: connection.userId, status: "RESOLVED" },
-      data: { status: target, closedAt: target === "CLOSED" ? new Date() : null },
-    });
-    if (changed.count !== 1) return;
-    await tx.ticketStatusHistory.create({
-      data: { ticketId, fromStatus: "RESOLVED", toStatus: target, actorId: connection.userId },
-    });
-    await tx.auditLog.create({
-      data: {
-        actorId: connection.userId,
-        action: target === "CLOSED" ? "USER_CONFIRMED_RESOLUTION" : "TICKET_REOPENED",
-        entityType: "Ticket",
-        entityId: ticketId,
-      },
-    });
-  });
+  if (action !== "fixed" && action !== "reopen") return;
+  const target = await applyRequesterDecision(ticketId, connection.userId, action);
   return telegram("answerCallbackQuery", {
     callback_query_id: q.id,
-    text: target === "CLOSED" ? "Заявка закрыта" : "Заявка возвращена в работу",
+    text: !target ? "Действие уже недоступно" : target === "CLOSED" ? "Заявка закрыта" : "Заявка возвращена в работу",
   });
 }
 
@@ -101,6 +85,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
   await db.$transaction(async (tx) => {
+    // chatId is unique: a chat re-linked to another account must be released first.
+    await tx.telegramConnection.deleteMany({ where: { chatId: String(chatId), NOT: { userId: link.userId } } });
     await tx.telegramConnection.upsert({
       where: { userId: link.userId },
       update: { chatId: String(chatId), linkedAt: new Date() },
