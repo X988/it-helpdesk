@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { onTicketCreated } from "@/lib/notifications";
 import { requireSession } from "@/lib/auth";
 import { ticketCreateSchema } from "@/lib/validation";
 
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
       });
       return created;
     });
+    onTicketCreated(ticket.id, session.userId);
     return NextResponse.json({ ticket }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

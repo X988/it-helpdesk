@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { onTicketAssigned } from "@/lib/notifications";
 import { requireRole } from "@/lib/auth";
 import { assignSchema } from "@/lib/validation";
 
@@ -66,6 +67,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return tx.ticket.findUnique({ where: { id } });
     });
 
+    if (current.assigneeId !== assignee.id) onTicketAssigned(id, session.userId);
     return NextResponse.json({ ticket });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNAUTHORIZED";

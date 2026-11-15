@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import FilePasteZone from "@/components/FilePasteZone";
-import { formatPerson } from "@/lib/labels";
+import { formatPerson, roleLabel } from "@/lib/labels";
 
 type Staff = { id: string; name: string; username: string | null; role: string };
 
@@ -14,6 +14,7 @@ export default function TicketActions({
   currentAssigneeId,
   currentWorkMinutes,
   chatMode = false,
+  isRequester = false,
 }: {
   id: string;
   canManage: boolean;
@@ -21,6 +22,7 @@ export default function TicketActions({
   currentAssigneeId: string | null;
   currentWorkMinutes: number | null;
   chatMode?: boolean;
+  isRequester?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -50,6 +52,19 @@ export default function TicketActions({
     if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || m < 0) return null;
     const total = Math.round(h * 60 + m);
     return total > 0 ? total : null;
+  }
+
+  async function decide(decision: "fixed" | "reopen") {
+    setError("");
+    setBusy(true);
+    const r = await fetch(`/api/tickets/${id}/confirm`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }).catch(() => null);
+    setBusy(false);
+    if (!r?.ok) setError("Действие недоступно — обновите страницу");
+    router.refresh();
   }
 
   async function claim() {
@@ -127,21 +142,56 @@ export default function TicketActions({
 
   return (
     <div className="actions">
+      {isRequester && currentStatus === "RESOLVED" && (
+        <div className="card confirmBox">
+          <p style={{ marginTop: 0 }}>
+            <b>Специалист отметил заявку как решённую.</b> Проблема действительно решена?
+          </p>
+          <div className="actionRow" style={{ marginBottom: 0 }}>
+            <button type="button" onClick={() => decide("fixed")} disabled={busy}>
+              Да, решена — закрыть
+            </button>
+            <button type="button" className="secondary" onClick={() => decide("reopen")} disabled={busy}>
+              Нет, вернуть в работу
+            </button>
+          </div>
+        </div>
+      )}
       {canManage && (
         <>
           <div className="actionRow">
-            <button type="button" onClick={claim}>
-              Взять в работу
-            </button>
-            <button type="button" className="secondary" onClick={() => status("WAITING_FOR_USER")}>
-              Ждём пользователя
-            </button>
-            <button type="button" className="secondary" onClick={() => status("RESOLVED")}>
-              Решено
-            </button>
+            {currentStatus === "NEW" && (
+              <button type="button" onClick={claim}>
+                Взять в работу
+              </button>
+            )}
+            {(currentStatus === "WAITING_FOR_USER" || currentStatus === "RESOLVED") && (
+              <button type="button" className="secondary" onClick={() => status("IN_PROGRESS")}>
+                Вернуть в работу
+              </button>
+            )}
+            {currentStatus === "IN_PROGRESS" && (
+              <button type="button" className="secondary" onClick={() => status("WAITING_FOR_USER")}>
+                Ждём пользователя
+              </button>
+            )}
+            {(currentStatus === "IN_PROGRESS" || currentStatus === "WAITING_FOR_USER") && (
+              <button type="button" className="secondary" onClick={() => status("RESOLVED")}>
+                Решено
+              </button>
+            )}
             {currentStatus === "RESOLVED" && (
               <button type="button" className="secondary" onClick={() => status("CLOSED")}>
                 Закрыть
+              </button>
+            )}
+            {["NEW", "IN_PROGRESS", "WAITING_FOR_USER"].includes(currentStatus) && (
+              <button
+                type="button"
+                className="secondary danger"
+                onClick={() => window.confirm("Отменить заявку?") && status("CANCELLED")}
+              >
+                Отменить
               </button>
             )}
           </div>
@@ -152,7 +202,7 @@ export default function TicketActions({
                 <option value="">— не выбран —</option>
                 {staff.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {formatPerson(u.name, u.username)} [{u.role}]
+                    {formatPerson(u.name, u.username)} [{roleLabel[u.role as keyof typeof roleLabel] ?? u.role}]
                   </option>
                 ))}
               </select>

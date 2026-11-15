@@ -1,4 +1,15 @@
-import type { Priority, TicketStatus, TaskDirection, Role } from "@prisma/client";
+import type { Priority, TicketStatus, TaskDirection, Role, NotificationType } from "@prisma/client";
+
+export const notificationLabel: Record<NotificationType, string> = {
+  TICKET_CREATED: "Новая заявка",
+  TICKET_ASSIGNED: "Заявка назначена",
+  STATUS_CHANGED: "Изменён статус",
+  NEW_MESSAGE: "Новое сообщение",
+  WAITING_FOR_USER: "Нужен ваш ответ",
+  TICKET_RESOLVED: "Заявка решена",
+  TICKET_REOPENED: "Заявка открыта повторно",
+  TICKET_CLOSED: "Заявка закрыта",
+};
 
 export const priorityLabel: Record<Priority, string> = {
   LOW: "Низкий",

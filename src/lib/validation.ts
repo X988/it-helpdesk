@@ -54,6 +54,21 @@ export const assignSchema = z.object({
   assigneeId: z.string().uuid(),
 });
 
+export const categorySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  isActive: z.boolean().optional(),
+});
+
+export const userUpdateSchema = z
+  .object({
+    role: z.enum(["USER", "TECHNICIAN", "ADMIN"]),
+    isActive: z.boolean(),
+    organizationId: z.string().uuid().nullable(),
+    department: z.string().trim().max(120).nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
+
 export const organizationSchema = z.object({
   name: z.string().trim().min(1).max(120),
   domain: z
